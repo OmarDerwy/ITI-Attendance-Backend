@@ -7,8 +7,11 @@ name = "pypi"
 django = "*"
 django-extensions = "*"
 djangorestframework = "*"
+djangorestframework-simplejwt = "*"
+faker = "*"
 
 [dev-packages]
+django-shortcuts = "*"
 
 [requires]
 python_version = "3.13"
