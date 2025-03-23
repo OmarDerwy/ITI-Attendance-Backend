@@ -1,0 +1,27 @@
+meta {
+  name: create user
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8000/api/v1/users/auth/users/
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  email: random@random.com
+  password: password@@
+}
+
+docs {
+  example response:
+  ```
+  {
+    "id": 8,
+    "email": "random@random.com",
+    "first_name": "",
+    "last_name": ""
+  }
+}
