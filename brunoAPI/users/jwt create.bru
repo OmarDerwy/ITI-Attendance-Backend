@@ -1,0 +1,25 @@
+meta {
+  name: jwt create
+  type: http
+  seq: 4
+}
+
+post {
+  url: http://localhost:8000/api/v1/users/auth/jwt/create/
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  email: admin@admin.com
+  password: admin
+}
+
+docs {
+  example response:
+  ```
+  {
+    "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc0MjgxMjQxNywiaWF0IjoxNzQyNzI2MDE3LCJqdGkiOiIyM2RkNWFjNDNmNjk0Njg1ODNlMWU1NzM3MDdiNmJhNSIsInVzZXJfaWQiOjF9.KYQDU3s9R6eEiNo79x97ybg3NhL5-rDd_uc-x3CeKCg",
+    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQyNzI2MzE3LCJpYXQiOjE3NDI3MjYwMTcsImp0aSI6IjgxMDU5OTNlOGIxOTQ0NGZiZDAzN2ViOGViMTA0NjIxIiwidXNlcl9pZCI6MX0.dblXhMZF1zfHIUtPEPPkTV7QD9ExPY5NuIyikFaF6Z8"
+  }
+}

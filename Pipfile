@@ -9,6 +9,8 @@ django-extensions = "*"
 djangorestframework = "*"
 djangorestframework-simplejwt = "*"
 faker = "*"
+djoser = "*"
+drf-spectacular = "*"
 
 [dev-packages]
 django-shortcuts = "*"
