@@ -1,13 +1,18 @@
 meta {
-  name: get users
+  name: modify parts of user
   type: http
-  seq: 1
+  seq: 4
 }
 
-get {
-  url: http://localhost:8000/api/v1/accounts/users/
-  body: none
+patch {
+  url: http://localhost:8000/api/v1/accounts/users/4/
+  body: multipartForm
   auth: none
+}
+
+body:multipart-form {
+  last_name: omar hany
+  username: sdlkf
 }
 
 docs {

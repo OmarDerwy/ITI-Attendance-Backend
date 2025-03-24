@@ -1,12 +1,12 @@
 meta {
-  name: get users
+  name: delete user
   type: http
-  seq: 1
+  seq: 5
 }
 
-get {
-  url: http://localhost:8000/api/v1/accounts/users/
-  body: none
+delete {
+  url: http://localhost:8000/api/v1/accounts/users/4/
+  body: multipartForm
   auth: none
 }
 
