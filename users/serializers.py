@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from django.contrib.auth.models import Group
-from .models import CustomUser
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from djoser.serializers import UserSerializer as BaseUserSerializer
 from django.contrib.auth import get_user_model

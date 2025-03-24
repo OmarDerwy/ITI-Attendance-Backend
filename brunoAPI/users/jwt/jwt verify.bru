@@ -1,0 +1,11 @@
+meta {
+  name: jwt verify
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8000/api/v1/accounts/auth/jwt/verify
+  body: multipartForm
+  auth: none
+}

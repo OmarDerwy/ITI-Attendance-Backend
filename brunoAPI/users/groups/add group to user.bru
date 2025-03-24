@@ -1,18 +1,25 @@
 meta {
-  name: create user
+  name: add group to user
   type: http
-  seq: 2
+  seq: 3
 }
 
-post {
-  url: http://localhost:8000/api/v1/accounts/auth/users/
-  body: multipartForm
+patch {
+  url: http://localhost:8000/api/v1/accounts/users/3/groups/
+  body: json
   auth: inherit
 }
 
+body:json {
+  {
+    "groups":[
+      "supervisor"
+    ]
+  }
+}
+
 body:multipart-form {
-  email: raandommoooo@random.com
-  password: paasswor
+  groups: 1
 }
 
 docs {
