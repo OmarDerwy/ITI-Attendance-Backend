@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'users',
     'djoser',
     'drf_spectacular',
+    'lost_and_found_system',
 ]
 
 MIDDLEWARE = [
