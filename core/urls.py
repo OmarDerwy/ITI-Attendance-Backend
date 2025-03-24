@@ -18,13 +18,8 @@ from django.contrib import admin
 from django.urls import path, include
 from . import views
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from rest_framework import routers
-from users.viewsets import UserViewSet
-
 API_PREFIX = 'api/v1/'
 
-router = routers.DefaultRouter()
-router.register(r'', UserViewSet, basename='user')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -34,9 +29,6 @@ urlpatterns = [
     path(f'{API_PREFIX}schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     # test endpoint
     path(f'{API_PREFIX}dummy/', views.hello_world, name='hello-world'),
-    # auth
-    path(f'{API_PREFIX}auth/', include('djoser.urls.jwt'), name='auth-jwt'),
-    path(f'{API_PREFIX}auth/', include('djoser.urls'), name='auth'),
     # apps
-    path(f'{API_PREFIX}users/', include('users.urls')),
+    path(f'{API_PREFIX}accounts/', include('users.urls')),
 ]

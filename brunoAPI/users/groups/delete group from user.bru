@@ -1,18 +1,25 @@
 meta {
-  name: create user
+  name: delete group from user
   type: http
   seq: 2
 }
 
-post {
-  url: http://localhost:8000/api/v1/accounts/auth/users/
-  body: multipartForm
+delete {
+  url: http://localhost:8000/api/v1/accounts/users/3/groups/
+  body: json
   auth: inherit
 }
 
+body:json {
+  {
+    "groups":[
+      "test2", "test3"
+    ]
+  }
+}
+
 body:multipart-form {
-  email: raandommoooo@random.com
-  password: paasswor
+  groups: 1
 }
 
 docs {
