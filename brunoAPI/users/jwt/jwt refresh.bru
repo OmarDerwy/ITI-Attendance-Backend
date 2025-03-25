@@ -4,8 +4,12 @@ meta {
   seq: 3
 }
 
-get {
+post {
   url: http://localhost:8000/api/v1/accounts/auth/jwt/refresh
-  body: none
-  auth: inherit
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  refresh: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQyOTA4NzQ4LCJpYXQiOjE3NDI5MDg0NDgsImp0aSI6IjZiZGI4OTAyODdlYTRkNzRiZTFlNTFkY2FjNGE1MWFlIiwidXNlcl9pZCI6MX0.pNwjDRCAGbofahkJBog1A5GOCAOBiD2rS5XJGTPw8qQ
 }
