@@ -1,5 +1,6 @@
 from . import models, serializers
 from rest_framework import viewsets, permissions
+from core import permissions as core_permissions
 from rest_framework.generics import RetrieveUpdateAPIView
 from django.contrib.auth.models import Group
 from rest_framework.decorators import action
@@ -10,6 +11,7 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = models.CustomUser.objects.all().order_by('id')
     serializer_class = serializers.CustomUserSerializer
     http_method_names = ['get', 'put', 'patch', 'delete']
+    permission_classes = [permissions.IsAdminUser]
 
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
