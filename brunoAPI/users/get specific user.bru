@@ -1,0 +1,15 @@
+meta {
+  name: get specific user
+  type: http
+  seq: 2
+}
+
+get {
+  url: http://localhost:8000/api/v1/accounts/auth/users/13/
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  first_name: omar
+}

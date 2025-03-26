@@ -1,13 +1,13 @@
 meta {
   name: delete user
   type: http
-  seq: 5
+  seq: 8
 }
 
 delete {
   url: http://localhost:8000/api/v1/accounts/users/4/
   body: multipartForm
-  auth: none
+  auth: inherit
 }
 
 docs {

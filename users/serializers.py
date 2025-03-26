@@ -20,6 +20,10 @@ class CustomUserSerializer(BaseUserSerializer):
     class Meta(BaseUserSerializer.Meta):
         model = User
         fields = ['id', 'email', 'groups','username', 'first_name', 'last_name', 'phone_number', 'phone_uuid', 'laptop_uuid']
+class CustomSelfUserSerializer(BaseUserSerializer):
+    class Meta(BaseUserSerializer.Meta):
+        model = User
+        fields = ['id', 'email','username', 'first_name', 'last_name']
 
 class GroupSerializer(serializers.ModelSerializer):
     class Meta:

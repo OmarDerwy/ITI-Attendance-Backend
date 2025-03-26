@@ -4,8 +4,12 @@ meta {
   seq: 1
 }
 
-get {
-  url: http://localhost:8000/api/v1/dummy/
-  body: none
+patch {
+  url: http://localhost:8000/api/v1/accounts/auth/users/5/
+  body: multipartForm
   auth: inherit
+}
+
+body:multipart-form {
+  groups: 3
 }

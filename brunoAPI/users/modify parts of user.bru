@@ -1,13 +1,13 @@
 meta {
   name: modify parts of user
   type: http
-  seq: 4
+  seq: 7
 }
 
 patch {
   url: http://localhost:8000/api/v1/accounts/users/4/
   body: multipartForm
-  auth: none
+  auth: inherit
 }
 
 body:multipart-form {
