@@ -43,6 +43,9 @@ INSTALLED_APPS = [
     'djoser',
     'drf_spectacular',
     'users',
+    'lost_and_found_system',
+    'django_extensions',
+
 ]
 
 MIDDLEWARE = [
@@ -133,6 +136,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',

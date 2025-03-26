@@ -6,11 +6,12 @@ name = "pypi"
 [packages]
 django = "*"
 django-extensions = "*"
-djangorestframework = "*"
-djangorestframework-simplejwt = "*"
 faker = "*"
 djoser = "*"
+djangorestframework = "*"
 drf-spectacular = "*"
+pillow = "*"
+djangorestframework-simplejwt = "*"
 
 [dev-packages]
 django-shortcuts = "*"
