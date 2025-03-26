@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'users',
     'lost_and_found_system',
+    'django_extensions',
+
 ]
 
 MIDDLEWARE = [

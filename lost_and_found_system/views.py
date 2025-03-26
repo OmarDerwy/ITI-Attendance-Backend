@@ -1,8 +1,9 @@
+from itertools import chain
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, permissions
 from .models import LostItem, FoundItem, MatchedItem
-from .serializers import LostItemSerializer, FoundItemSerializer, MatchedItemSerializer
-from rest_framework.permissions import IsAuthenticated
+from .serializers import LostItemSerializer, FoundItemSerializer, MatchedItemSerializer, ItemSerializer
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -11,6 +12,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class AllItemsViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint to view all lost and found items.
+    """
+    serializer_class = ItemSerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        LostItems = LostItem.objects.all()
+        FoundItems = FoundItem.objects.all()
+        return list(chain(LostItems, FoundItems))
 
 class LostItemViewSet(viewsets.ModelViewSet):
     """
@@ -30,19 +43,7 @@ class LostItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    @action(detail=False, methods=['GET'], url_path='my-items', url_name='my-lost-items')
-    def my_lost_items(self, request):
-        """
-        Return the logged-in user's lost items.
-        """
-        user_lost_items = self.get_queryset().filter(user=self.request.user)
-        page = self.paginate_queryset(user_lost_items)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(user_lost_items, many=True)
-        return Response(serializer.data)
+
 
 
 class FoundItemViewSet(viewsets.ModelViewSet):
@@ -63,11 +64,8 @@ class FoundItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    @action(detail=False, methods=['GET'], url_path='my-items', url_name='my-found-items')
+    @action(detail=False, methods=['GET'])
     def my_found_items(self, request):
-        """
-        Return the logged-in user's found items.
-        """
         user_found_items = self.get_queryset().filter(user=self.request.user)
         page = self.paginate_queryset(user_found_items)
         if page is not None:
@@ -95,9 +93,6 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['GET'], url_path='my-matches', url_name='my-matches')
     def my_matches(self, request):
-        """
-        Return matched items related to the logged-in user's lost items.
-        """
         user_matches = self.get_queryset()
         page = self.paginate_queryset(user_matches)
         if page is not None:
