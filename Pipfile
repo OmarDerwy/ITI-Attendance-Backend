@@ -6,17 +6,9 @@ name = "pypi"
 [packages]
 django = "*"
 django-extensions = "*"
-faker = "*"
-djoser = "*"
 djangorestframework = "*"
-drf-spectacular = "*"
-svix = "*"
-python-dotenv = "*"
-clerk-backend-api = "*"
-pillow = "*"
 djangorestframework-simplejwt = "*"
-psycopg2 = "*"
-pyjwt = "*"
+faker = "*"
 
 [dev-packages]
 django-shortcuts = "*"
