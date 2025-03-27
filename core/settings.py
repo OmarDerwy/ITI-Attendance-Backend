@@ -161,9 +161,7 @@ REST_FRAMEWORK = {
 }
 
 AUTHENTICATION_BACKENDS = [
-    "users.backends.ClerkAuthBackend",
     "djoser.auth_backends.LoginFieldBackend",
-    "django.contrib.auth.backends.ModelBackend",
 ]
 
 DJOSER = {
