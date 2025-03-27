@@ -32,7 +32,7 @@ SECRET_KEY = 'django-insecure-9j41$k*nn8e$2^(1jcm^5c68cj1aofg$#ag-*p-3y9ya0k1d8u
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['60fe-45-244-111-111.ngrok-free.app', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['60fe-45-244-111-111.ngrok-free.app', 'localhost', '127.0.0.1', '5d87-45-244-111-111.ngrok-free.app', '*.ngrok-free.app']
 
 
 # Application definition
@@ -149,11 +149,11 @@ AUTH_USER_MODEL = 'users.CustomUser'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'core.authentication.ClerkJWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
@@ -161,7 +161,9 @@ REST_FRAMEWORK = {
 }
 
 AUTHENTICATION_BACKENDS = [
+    "users.backends.ClerkAuthBackend",
     "djoser.auth_backends.LoginFieldBackend",
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
 DJOSER = {
@@ -203,7 +205,7 @@ SIMPLE_JWT = {
    'AUTH_HEADER_TYPES': ('Bearer',),
    'ACCESS_TOKEN_LIFETIME': timedelta(weeks=1),
    'REFRESH_TOKEN_LIFETIME': timedelta(weeks=1),
-   'SIGNING_KEY': os.getenv('CLERK_SECRET_KEY')
+   'SIGNING_KEY': os.getenv('CLERK_PUBLISHABLE_KEY')
 }
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Attendance Project API',
