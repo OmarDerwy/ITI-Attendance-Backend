@@ -15,6 +15,7 @@ python-dotenv = "*"
 clerk-backend-api = "*"
 pillow = "*"
 djangorestframework-simplejwt = "*"
+psycopg2 = "*"
 
 [dev-packages]
 django-shortcuts = "*"

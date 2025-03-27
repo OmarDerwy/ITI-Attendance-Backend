@@ -38,9 +38,14 @@ class CustomUser(AbstractUser):
     laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
+    password = None
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []  # Remove username from required fields
-
+    def set_password(self, raw_password):
+        raise NotImplementedError("Password cannot be set on this model")
+    def check_password(self, raw_password):
+        raise NotImplementedError("Password cannot be checked on this model")
+    
     objects = CustomUserManager()  # Use the custom manager
 
     def __str__(self):
