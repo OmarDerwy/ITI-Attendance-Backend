@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "lost&found_system",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
