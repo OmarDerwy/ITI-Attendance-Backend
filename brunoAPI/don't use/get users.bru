@@ -1,0 +1,44 @@
+meta {
+  name: get users
+  type: http
+  seq: 1
+}
+
+get {
+  url: http://localhost:8000/api/v1/accounts/auth/users/
+  body: none
+  auth: inherit
+}
+
+docs {
+  example response:
+  ```json
+  {
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 1,
+        "username": "admin",
+        "email": "admin@admin.com",
+        "first_name": "",
+        "last_name": "",
+        "phone_number": null,
+        "phone_uuid": null,
+        "laptop_uuid": null
+      },
+      {
+        "id": 2,
+        "username": "test",
+        "email": "",
+        "first_name": "",
+        "last_name": "",
+        "phone_number": null,
+        "phone_uuid": null,
+        "laptop_uuid": null
+      }
+    ]
+  }
+  ```
+}

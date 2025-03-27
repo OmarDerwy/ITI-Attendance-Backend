@@ -1,0 +1,15 @@
+meta {
+  name: modify group
+  type: http
+  seq: 3
+}
+
+patch {
+  url: http://localhost:8000/api/v1/accounts/groups/4/
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  name: student
+}

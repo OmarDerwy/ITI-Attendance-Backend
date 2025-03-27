@@ -1,0 +1,15 @@
+meta {
+  name: jwt verify
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8000/api/v1/accounts/auth/jwt/verify
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQzNjI3Njc5LCJpYXQiOjE3NDMwMjI4NzksImp0aSI6ImZiYWRlOTAyNjVmZjRkZTdhZDVhMDg3MWY4ZTY3ZTAwIiwidXNlcl9pZCI6Mn0.9HWiZC2TSxnD-CGA12pTqR2gTgVrIPY-buZgkSxHtQ8
+}

@@ -1,0 +1,19 @@
+meta {
+  name: get my lost items or all lost items for admin
+  type: http
+  seq: 4
+}
+
+get {
+  url: http://127.0.0.1:8000/api/v1/lost-and-found/lost-items/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name":"phone",
+    "desription":"black samsung",
+    "place":"cafeteria"
+  }
+}

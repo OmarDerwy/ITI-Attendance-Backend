@@ -1,0 +1,37 @@
+meta {
+  name: create user
+  type: http
+  seq: 5
+}
+
+post {
+  url: http://localhost:8000/api/v1/accounts/auth/users/
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {faker} = require('@faker-js/faker')
+  const first_name = faker.person.firstName()
+  const last_name = faker.person.lastName()
+  const email = faker.internet.email()
+  const password = faker.internet.password()
+  
+  req.setBody({
+    first_name,
+    last_name,
+    email,
+    password
+  })
+}
+
+docs {
+  example response:
+  ```
+  {
+    "id": 8,
+    "email": "random@random.com",
+    "first_name": "",
+    "last_name": ""
+  }
+}
