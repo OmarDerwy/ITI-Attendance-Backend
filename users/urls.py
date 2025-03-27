@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework import routers
 from .viewsets import UserViewSet, GroupViewSet
+from .views import clerk_webhook
 
 router = routers.DefaultRouter()
 router.register(r'groups', GroupViewSet, basename='group')
@@ -10,6 +11,9 @@ urlpatterns = [
     path('', include(router.urls), name='user-list'),
     path('auth/', include('djoser.urls.jwt'), name='auth-jwt'),
     path('auth/', include('djoser.urls'), name='auth'),
+
+    # Clerk webhook endpoint
+    path('webhooks/clerk/', clerk_webhook, name='webhook'),
 
 
     # path('api-auth/', include('rest_framework.urls', namespace='rest_framework'), name='rest_framework'),

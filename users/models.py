@@ -30,11 +30,14 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class CustomUser(AbstractUser):
+    clerk_user_id = models.CharField(max_length=255, unique=True, blank=True, null=True)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
     email = models.EmailField(unique=True, validators=[validate_email])
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     phone_uuid = models.CharField(max_length=100, blank=True, null=True)
     laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
+    first_name = models.CharField(max_length=30, blank=True, null=True)
+    last_name = models.CharField(max_length=30, blank=True, null=True)
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []  # Remove username from required fields
 

@@ -11,6 +11,9 @@ djangorestframework-simplejwt = "*"
 faker = "*"
 djoser = "*"
 drf-spectacular = "*"
+svix = "*"
+python-dotenv = "*"
+clerk-backend-api = "*"
 
 [dev-packages]
 django-shortcuts = "*"

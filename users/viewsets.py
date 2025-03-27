@@ -5,7 +5,7 @@ from rest_framework.generics import RetrieveUpdateAPIView
 from django.contrib.auth.models import Group
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from .helpers import getGroupIDFromNames
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = models.CustomUser.objects.all().order_by('id')
@@ -17,47 +17,25 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
     def user_groups(self, request, *args, **kwargs):
         user = self.get_object()
-        
         # GET request to retrieve groups
         if request.method == 'GET':
             groups = user.groups.all()
             serializer = serializers.GroupSerializer(groups, many=True)
             return Response(serializer.data)
         
-        # PATCH request to add groups to user
-        elif request.method == 'PATCH':
+        elif request.method in ['PATCH', 'PUT']:
             groups = request.data.get('groups', [])
-            group_ids = []
-            for group_name in groups:
-                try:
-                    group = Group.objects.get(name=group_name)
-                    group_ids.append(group.id)
-                except Group.DoesNotExist:
-                    return Response({'message': f'Group "{group_name}" does not exist'}, status=400)
             if not groups:
-                return Response({'message': 'No groups provided in the request'}, status=400)
-            user.groups.add(*group_ids)
-            added_groups = Group.objects.filter(id__in=group_ids)
-            serializer = serializers.GroupSerializer(added_groups, many=True)
-            return Response({'message': 'Groups added successfully', 'added_groups': serializer.data})
-        # PUT request to replace all groups with new groups
-        elif request.method == 'PUT':
-            groups = request.data.get('groups', [])
-            group_ids = []
-            for group_name in groups:
-                try:
-                    group = Group.objects.get(name=group_name)
-                    group_ids.append(group.id)
-                except Group.DoesNotExist:
-                    return Response({'message': f'Group "{group_name}" does not exist'}, status=400)
-            if not groups:
-                return Response({'message': 'No groups provided in the request'}, status=400)
-            user.groups.clear()
-            user.groups.add(*group_ids)
-            added_groups = user.groups.all()
-            serializer = serializers.GroupSerializer(added_groups, many=True)
-            return Response({'message': 'Groups replaced successfully', 'current_groups': serializer.data})
-        # DELETE request to remove groups from user
+                return Response({'message': 'Groups list cannot be empty'}, status=400)
+            group_ids = getGroupIDFromNames(groups)
+            if request.method == 'PUT':
+                user.groups.set(group_ids)  # Clear and add in one step
+            else:
+                user.groups.add(*group_ids)
+            updated_groups = user.groups.all()
+            serializer = serializers.GroupSerializer(updated_groups, many=True)
+            action = 'replaced' if request.method == 'PUT' else 'added'
+            return Response({'message': f'Groups {action} successfully', 'current_groups': serializer.data})
         elif request.method == 'DELETE':
             groups = request.data.get('groups', [])
             
@@ -68,18 +46,10 @@ class UserViewSet(viewsets.ModelViewSet):
                 else:
                     return Response({'message': 'User has no groups to remove'}, status=400)
             else:
-                group_ids = []
-                for group_name in groups:
-                    try:
-                        group = Group.objects.get(name=group_name)
-                        group_ids.append(group.id)
-                    except Group.DoesNotExist:
-                        return Response({'message': f'Group "{group_name}" does not exist'}, status=400)
-                
+                group_ids = getGroupIDFromNames(groups)
                 existing_groups = user.groups.filter(id__in=group_ids)
                 if not existing_groups.exists():
                     return Response({'message': 'User does not belong to the specified groups'}, status=400)
-                
                 user.groups.remove(*group_ids)
                 current_groups = user.groups.all()
                 serializer = serializers.GroupSerializer(current_groups, many=True)
