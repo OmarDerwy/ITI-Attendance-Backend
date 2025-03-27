@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-9j41$k*nn8e$2^(1jcm^5c68cj1aofg$#ag-*p-3y9ya0k1d8u
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['60fe-45-244-111-111.ngrok-free.app', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -147,7 +147,9 @@ REST_FRAMEWORK = {
 }
 
 AUTHENTICATION_BACKENDS = [
-    "djoser.auth_backends.LoginFieldBackend",
+    "users.backends.ClerkAuthBackend",
+    "django.contrib.auth.backends.ModelBackend",
+    # "djoser.auth_backends.LoginFieldBackend",
 ]
 
 DJOSER = {

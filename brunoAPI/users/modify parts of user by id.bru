@@ -1,13 +1,18 @@
 meta {
-  name: get user groups
+  name: modify parts of user by id
   type: http
-  seq: 1
+  seq: 7
 }
 
-get {
-  url: http://localhost:8000/api/v1/accounts/users/2/groups/
-  body: none
+patch {
+  url: http://localhost:8000/api/v1/accounts/users/4/
+  body: multipartForm
   auth: inherit
+}
+
+body:multipart-form {
+  last_name: omar hany
+  username: sdlkf
 }
 
 docs {
