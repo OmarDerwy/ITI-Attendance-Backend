@@ -11,7 +11,7 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = models.CustomUser.objects.all().order_by('id')
     serializer_class = serializers.CustomUserSerializer
     http_method_names = ['get', 'put', 'patch', 'delete']
-    permission_classes = [permissions.IsAdminUser]
+    # permission_classes = [permissions.IsAdminUser]
 
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
@@ -28,6 +28,8 @@ class UserViewSet(viewsets.ModelViewSet):
             if not groups:
                 return Response({'message': 'Groups list cannot be empty'}, status=400)
             group_ids = getGroupIDFromNames(groups)
+            if isinstance(group_ids, Response):
+                return group_ids
             if request.method == 'PUT':
                 user.groups.set(group_ids)  # Clear and add in one step
             else:
@@ -47,6 +49,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     return Response({'message': 'User has no groups to remove'}, status=400)
             else:
                 group_ids = getGroupIDFromNames(groups)
+                if isinstance(group_ids, Response):
+                    return group_ids
                 existing_groups = user.groups.filter(id__in=group_ids)
                 if not existing_groups.exists():
                     return Response({'message': 'User does not belong to the specified groups'}, status=400)

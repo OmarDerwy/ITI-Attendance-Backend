@@ -45,7 +45,6 @@ def clerk_webhook(request):
             except Exception as e:
                 logging.error(f"Error creating user: {str(e)}")
                 return JsonResponse({"error": "Failed to create user"}, status=500)
-            # Add your logic here (e.g., create a user in your database)
         elif event["type"] == "user.updated":
             # Handle user updates
             user_data: dict = event["data"]
@@ -59,6 +58,8 @@ def clerk_webhook(request):
                 public_metadata: dict = user_data.get("public_metadata", {})
                 role: list = public_metadata.get("roles", ["student"])
                 group_ids = getGroupIDFromNames(role)
+                if isinstance(group_ids, JsonResponse):
+                    return group_ids
                 user.groups.clear()
                 user.groups.set(group_ids)
                 user.save()
@@ -66,7 +67,6 @@ def clerk_webhook(request):
                 logging.error(f"User not found: {str(e)}")
                 return JsonResponse({"error": "User not found"}, status=404)
                 
-            # Add your logic here
         elif event["type"] == "user.deleted":
             # Handle user deletion
             user_data = event["data"]
@@ -77,7 +77,6 @@ def clerk_webhook(request):
             except CustomUser.DoesNotExist as e:
                 logging.error(f"User not found: {str(e)}")
                 return JsonResponse({"error": "User not found"}, status=404)
-            # Add your logic here
 
         return JsonResponse({"status": "success", "message": "Webhook received successfully"}, status=200)
     except WebhookVerificationError as e:
