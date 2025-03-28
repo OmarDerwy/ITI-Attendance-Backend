@@ -17,6 +17,7 @@ pillow = "*"
 djangorestframework-simplejwt = "*"
 psycopg2 = "*"
 pyjwt = "*"
+gunicorn = "*"
 
 [dev-packages]
 django-shortcuts = "*"

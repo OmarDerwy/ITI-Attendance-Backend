@@ -1,0 +1,10 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "python3 manage.py runserver 0.0.0.0:8000"  # Updated command to run the server
+    volumes:
+      - .:/app  # Mount the current directory to /app in the container
+    ports:
+      - "8000:8000"  # Map port 8000 of the container to port 8000 of the host

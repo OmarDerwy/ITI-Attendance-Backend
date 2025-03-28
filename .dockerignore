@@ -1,0 +1,14 @@
+erd.mermaid
+.vscode
+*.md
+*.png
+*.jpg
+*.jpeg
+
+.git
+*.gitignore
+
+brunoAPI
+db.sqlite3
+docker-compose.yml
+dockerfile
