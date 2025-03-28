@@ -35,6 +35,8 @@ class CustomUser(AbstractUser):
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     phone_uuid = models.CharField(max_length=100, blank=True, null=True)
     laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
+    first_name = models.CharField(max_length=30, blank=True, null=True)
+    last_name = models.CharField(max_length=30, blank=True, null=True)
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []  # Remove username from required fields
 
