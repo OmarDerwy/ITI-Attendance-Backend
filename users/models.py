@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import validate_email
 from django.contrib.auth.base_user import BaseUserManager
+from django.contrib.auth.models import Group
 # Create your models here.
 
 class CustomUserManager(BaseUserManager):
@@ -30,7 +31,8 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class CustomUser(AbstractUser):
-    username = models.CharField(max_length=150, unique=True, blank=True, null=True)
+
+    username = None
     email = models.EmailField(unique=True, validators=[validate_email])
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     phone_uuid = models.CharField(max_length=100, blank=True, null=True)
@@ -46,7 +48,14 @@ class CustomUser(AbstractUser):
         return f"{self.first_name} {self.last_name} ({self.email})"
         
     def save(self, *args, **kwargs):
-        # Auto-generate username from email if not provided
-        if not self.username:
-            self.username = self.email
-        super().save(*args, **kwargs)
+        super().save(*args, **kwargs)  # Save the user first
+        if not self.groups.exists():  # If no groups are assigned
+            student_group, created = Group.objects.get_or_create(name='student')
+            self.groups.add(student_group)
+        if 'admin' in self.groups.values_list('name', flat=True):
+            self.is_staff = True
+            self.is_superuser = True
+    #     # Auto-generate username from email if not provided
+    #     if not self.username:
+    #         self.username = self.email
+    #     super().save(*args, **kwargs)
