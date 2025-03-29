@@ -26,17 +26,18 @@ erDiagram
         string student_id FK
         string schedule_id FK
     }
-    geofence {
-        string id
-        string name
-        float long
-        float lat
-        float radius
-    }
+    %% geofence {
+    %%     string id
+    %%     string name
+    %%     float long
+    %%     float lat
+    %%     float radius
+    %% }
     track {
         string id
         string name
         string supervisor_id FK
+        string branch_id FK
         datetime created_at
     }
     lost_item {
@@ -95,12 +96,20 @@ erDiagram
         string laptop_uuid
         string phone_uuid
     }
+    branch{
+        string id
+        float long
+        float lat
+        string location_url
+        float radius
+    }
 
     role ||--o{ User : "has"
-    User }|--|| Student_info : "enrolled in"
+    User ||--|| Student_info : "has"
     track ||--|{ Student_info : "enrolled in"
-    User ||--o| track : "supervises"
-    User ||--o| Course : "instructs"
+    %% User }|--|| branch : "belongs to"
+    track }|--|| branch : "part of"
+    User ||--o{ Course : "instructs"
     User ||--o{ Notification : "receives"
     User ||--o{ Attendance_record : "checks in/out"
     User ||--o{ lost_item : "loses"
@@ -108,7 +117,7 @@ erDiagram
     lost_item ||--o{ matching_record : "matches"
     found_item ||--o{ matching_record : "matches"
     %% schedule ||--|| track : "belongs to"
-    schedule ||--|| geofence : "has location"
+    %% schedule ||--|| geofence : "has location"
     Attendance_record }|--|| schedule : "for session"
     Course ||--o{ schedule : "has sessions"
     track ||--o{ Course : "contains"
