@@ -74,5 +74,4 @@ class UserViewSet(viewsets.ModelViewSet):
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
     serializer_class = serializers.GroupSerializer
-    permission_classes = [core_permissions.HasRequiredGroupForView]
-    required_groups = ['admin']
+    permission_classes = [core_permissions.IsAdminUser]
