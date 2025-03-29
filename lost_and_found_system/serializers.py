@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices
+from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices, Notification
 
 class LostItemSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
@@ -23,11 +23,13 @@ class MatchedItemSerializer(serializers.ModelSerializer):
     lost_item = LostItemSerializer(read_only=True)
     found_item = FoundItemSerializer(read_only=True)
     status = serializers.ChoiceField(choices=MatchedItem.MatchingResult.choices)
+    similarity_score = serializers.FloatField(read_only=True)
 
     class Meta:
         model = MatchedItem
         fields = ['match_id', 'lost_item', 'found_item', 'similarity_score', 'created_at', 'status']
         read_only_fields = ['match_id', 'created_at']
+
 class ItemSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     status = serializers.ChoiceField(choices=ItemStatusChoices.choices, read_only=True)
@@ -61,3 +63,8 @@ class ItemSerializer(serializers.ModelSerializer):
             self.Meta.model = LostItem
         
         return super().to_representation(instance)
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = '__all__'

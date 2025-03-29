@@ -1,8 +1,8 @@
 from itertools import chain
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, permissions
-from .models import LostItem, FoundItem, MatchedItem
-from .serializers import LostItemSerializer, FoundItemSerializer, MatchedItemSerializer, ItemSerializer
+from .models import LostItem, FoundItem, MatchedItem, Notification
+from .serializers import LostItemSerializer, FoundItemSerializer, MatchedItemSerializer, ItemSerializer, NotificationSerializer
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
@@ -122,3 +122,34 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
         match.status = new_status
         match.save()
         return Response({"message": "Match status updated successfully."})
+    
+class NotificationViewSet(viewsets.ModelViewSet):
+    queryset = Notification.objects.all()
+    serializer_class = NotificationSerializer
+    permission_classes=[IsAuthenticated]
+    
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if not self.request.user.is_staff:
+            qs = qs.filter(user=self.request.user)  # Users only see their own items
+        return qs
+    
+    @action(detail=False, methods=["GET"])
+    def unread(self, request):
+        """Get unread notifications"""
+        unread_notifications = self.get_queryset().filter(is_read=False)
+        serializer = self.get_serializer(unread_notifications, many=True)
+        return Response(serializer.data)
+    @action(detail=True, methods=["POST"])
+    def mark_as_read(self, request, pk=None):
+        """Mark a notification as read"""
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        return Response({"status": "Notification marked as read"})
+    
+    @action(detail=False, methods=["POST"])
+    def mark_all_as_read(self, request):
+        """Mark all notifications as read for the user"""
+        self.get_queryset().update(is_read=True)
+        return Response({"status": "All notifications marked as read"})

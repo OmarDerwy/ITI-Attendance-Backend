@@ -12,6 +12,9 @@ djangorestframework = "*"
 drf-spectacular = "*"
 pillow = "*"
 djangorestframework-simplejwt = "*"
+channels = "*"
+channels-redis = "*"
+daphne = "*"
 
 [dev-packages]
 django-shortcuts = "*"
