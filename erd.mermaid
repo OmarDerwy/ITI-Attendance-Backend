@@ -109,6 +109,7 @@ erDiagram
     track ||--|{ Student_info : "enrolled in"
     %% User }|--|| branch : "belongs to"
     track }|--|| branch : "part of"
+    track ||--|| User : "supervises"
     User ||--o{ Course : "instructs"
     User ||--o{ Notification : "receives"
     User ||--o{ Attendance_record : "checks in/out"

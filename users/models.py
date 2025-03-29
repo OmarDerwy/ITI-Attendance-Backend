@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import validate_email
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import Group
+from attendance_management.models import StudentInfo
 # Create your models here.
 
 class CustomUserManager(BaseUserManager):
@@ -35,10 +36,9 @@ class CustomUser(AbstractUser):
     username = None
     email = models.EmailField(unique=True, validators=[validate_email])
     phone_number = models.CharField(max_length=15, blank=True, null=True)
-    phone_uuid = models.CharField(max_length=100, blank=True, null=True)
-    laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
+    student_info = models.OneToOneField(StudentInfo, on_delete=models.CASCADE, related_name='users')
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []  # Remove username from required fields
 
