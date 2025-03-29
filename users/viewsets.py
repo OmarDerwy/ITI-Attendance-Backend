@@ -5,6 +5,7 @@ from rest_framework.generics import RetrieveUpdateAPIView
 from django.contrib.auth.models import Group
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from .helpers import getGroupIDFromNames
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -27,15 +28,9 @@ class UserViewSet(viewsets.ModelViewSet):
         # PATCH request to add groups to user
         elif request.method == 'PATCH':
             groups = request.data.get('groups', [])
-            group_ids = []
-            for group_name in groups:
-                try:
-                    group = Group.objects.get(name=group_name)
-                    group_ids.append(group.id)
-                except Group.DoesNotExist:
-                    return Response({'message': f'Group "{group_name}" does not exist'}, status=400)
-            if not groups:
-                return Response({'message': 'No groups provided in the request'}, status=400)
+            group_ids = getGroupIDFromNames(groups)
+            if isinstance(group_ids, Response):
+                return group_ids
             user.groups.add(*group_ids)
             added_groups = Group.objects.filter(id__in=group_ids)
             serializer = serializers.GroupSerializer(added_groups, many=True)
@@ -43,15 +38,9 @@ class UserViewSet(viewsets.ModelViewSet):
         # PUT request to replace all groups with new groups
         elif request.method == 'PUT':
             groups = request.data.get('groups', [])
-            group_ids = []
-            for group_name in groups:
-                try:
-                    group = Group.objects.get(name=group_name)
-                    group_ids.append(group.id)
-                except Group.DoesNotExist:
-                    return Response({'message': f'Group "{group_name}" does not exist'}, status=400)
-            if not groups:
-                return Response({'message': 'No groups provided in the request'}, status=400)
+            group_ids = getGroupIDFromNames(groups)
+            if isinstance(group_ids, Response):
+                return group_ids
             user.groups.clear()
             user.groups.add(*group_ids)
             added_groups = user.groups.all()
@@ -68,14 +57,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 else:
                     return Response({'message': 'User has no groups to remove'}, status=400)
             else:
-                group_ids = []
-                for group_name in groups:
-                    try:
-                        group = Group.objects.get(name=group_name)
-                        group_ids.append(group.id)
-                    except Group.DoesNotExist:
-                        return Response({'message': f'Group "{group_name}" does not exist'}, status=400)
-                
+                group_ids = getGroupIDFromNames(groups)
+                if isinstance(group_ids, Response):
+                    return group_ids
                 existing_groups = user.groups.filter(id__in=group_ids)
                 if not existing_groups.exists():
                     return Response({'message': 'User does not belong to the specified groups'}, status=400)
@@ -90,3 +74,5 @@ class UserViewSet(viewsets.ModelViewSet):
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
     serializer_class = serializers.GroupSerializer
+    permission_classes = [core_permissions.HasRequiredGroupForView]
+    required_groups = ['admin']

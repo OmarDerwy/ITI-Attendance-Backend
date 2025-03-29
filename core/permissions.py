@@ -30,3 +30,28 @@ class HasRequiredGroupForView(BasePermission):
         required_groups = [group.lower() for group in required_groups]
         user_groups = request.user.groups.values_list('name', flat=True)
         return bool(set(required_groups).intersection(set(user_groups)))
+    
+class IsAdminUser(BasePermission):
+    """
+    Check if user belongs to admin group.
+    """
+    def has_permission(self, request, view):
+        return request.user.groups.filter(name='admin').exists() and request.user.is_active
+class IsSupervisorOrBelowUser(BasePermission):
+    """
+    Check if user belongs to supervisor group or below.
+    """
+    def has_permission(self, request, view):
+        return request.user.groups.filter(name__in=['admin', 'supervisor']).exists() and request.user.is_active
+class IsInstructorOrAboveUser(BasePermission):
+    """
+    Check if user belongs to instructor group or above.
+    """
+    def has_permission(self, request, view):
+        return request.user.groups.filter(name__in=['admin', 'supervisor', 'instructor']).exists() and request.user.is_active
+class IsStudentOrAboveUser(BasePermission):
+    """
+    Check if user belongs to student group or above.
+    """
+    def has_permission(self, request, view):
+        return request.user.groups.filter(name__in=['admin', 'supervisor', 'instructor', 'student']).exists() and request.user.is_active
