@@ -15,7 +15,7 @@ python-dotenv = "*"
 clerk-backend-api = "*"
 pillow = "*"
 djangorestframework-simplejwt = "*"
-psycopg2 = "*"
+psycopg2-binary = "*"
 pyjwt = "*"
 
 [dev-packages]
