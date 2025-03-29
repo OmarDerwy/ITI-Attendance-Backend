@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'users',
     'lost_and_found_system',
     'django_extensions',
-
+    'attendance_management',
 ]
 
 MIDDLEWARE = [
