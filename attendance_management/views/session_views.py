@@ -4,12 +4,12 @@ from rest_framework.response import Response
 from django.utils.timezone import now
 from ..models import Session
 from ..serializers import SessionSerializer
-from core.permissions import IsStudentUser
+from core import permissions
 
 class SessionViewSet(viewsets.ModelViewSet):
     queryset = Session.objects.all()
     serializer_class = SessionSerializer
-    permission_classes = [IsStudentUser] # TODO change into new permissions system
+    permission_classes = [permissions.IsStudentOrAboveUser] # CHECK if too much permissions to student
 
     @action(detail=False, methods=['get'], url_path='today-by-track')
     def today_by_track(self, request):
