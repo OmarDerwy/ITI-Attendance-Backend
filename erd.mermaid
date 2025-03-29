@@ -2,8 +2,8 @@ erDiagram
     User {
         string id
         string name
-        string role_id
-        string UUID
+        string role_id FK
+        string student_info_id FK
         string email
         string phone
         string password_hash
@@ -23,7 +23,8 @@ erDiagram
         float long
         float lat
         string status
-        string schedule_id
+        string student_id FK
+        string schedule_id FK
     }
     geofence {
         string id
@@ -35,7 +36,7 @@ erDiagram
     track {
         string id
         string name
-        string supervisor_id
+        string supervisor_id FK
         datetime created_at
     }
     lost_item {
@@ -63,6 +64,8 @@ erDiagram
     matching_record {
         string match_id
         float similarity_score
+        string lost_item_id FK
+        string found_item FK
         string status
     }
     role {
@@ -75,20 +78,27 @@ erDiagram
         string description
         datetime start_time
         datetime end_time
-        string course_id
+        string course_id FK
         boolean is_online
-        string geofence_id
+        string geofence_id FK
     }
     Course {
         string id
         string name
-        string instructor_id
+        string instructor_id FK
         string description
         datetime created_at
     }
+    Student_info{
+        string id
+        string track_id FK
+        string laptop_uuid
+        string phone_uuid
+    }
 
     role ||--o{ User : "has"
-    User ||--|| track : "enrolled in"
+    User }|--|| Student_info : "enrolled in"
+    track ||--|{ Student_info : "enrolled in"
     User ||--o| track : "supervises"
     User ||--o| Course : "instructs"
     User ||--o{ Notification : "receives"
@@ -99,6 +109,7 @@ erDiagram
     found_item ||--o{ matching_record : "matches"
     %% schedule ||--|| track : "belongs to"
     schedule ||--|| geofence : "has location"
-    Attendance_record ||--|| schedule : "for session"
+    Attendance_record }|--|| schedule : "for session"
     Course ||--o{ schedule : "has sessions"
     track ||--o{ Course : "contains"
+    %% we might want to make track - course relationship manytomany for courses that include many tracks such as soft skills and such
