@@ -12,6 +12,8 @@ djangorestframework = "*"
 drf-spectacular = "*"
 pillow = "*"
 djangorestframework-simplejwt = "*"
+psycopg2-binary = "*"
+pyjwt = "*"
 
 [dev-packages]
 django-shortcuts = "*"

@@ -34,4 +34,5 @@ urlpatterns = [
     # apps
     path(f'{API_PREFIX}lost-and-found/', include('lost_and_found_system.urls')),
     path(f'{API_PREFIX}accounts/', include('users.urls')),
+    path(f'{API_PREFIX}attendance/', include('attendance_management.urls')),
 ]
