@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Schedule, Session, Student, Track, Branch
+from .models import Schedule, Session, StudentInfo, Track, Branch
 
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,7 +15,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
 
 class StudentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Student
+        model = StudentInfo
         fields = ['id', 'user', 'track']
 
 class TrackSerializer(serializers.ModelSerializer):
