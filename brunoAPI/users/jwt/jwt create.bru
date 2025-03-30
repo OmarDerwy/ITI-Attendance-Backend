@@ -11,12 +11,14 @@ post {
 }
 
 body:multipart-form {
-  email: user1@iti.com
-  password: test_test1
+  email: admin@admin.com
+  password: admin
 }
 
 script:post-response {
-  bru.setVar("jwt_token", res.body.access)
+  bru.setEnvVar("jwt-access", res.body.access)
+  bru.setEnvVar("jwt-refresh", res.body.refresh)
+  
 }
 
 docs {

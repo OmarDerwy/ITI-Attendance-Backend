@@ -46,7 +46,7 @@ class Session(models.Model):
     def __str__(self):
         return f"{self.title} ({self.start_time} - {self.end_time})"
 
-class Student(models.Model):
+class StudentInfo(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='student_profile')
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='students')
     phone_uuid = models.CharField(max_length=100, blank=True, null=True)

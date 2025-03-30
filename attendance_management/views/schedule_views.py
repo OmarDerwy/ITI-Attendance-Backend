@@ -5,12 +5,12 @@ from django.utils.timezone import now
 from datetime import timedelta
 from ..models import Schedule
 from ..serializers import ScheduleSerializer
-from core.permissions import IsSupervisorUser, IsStudentUser
+from core import permissions
 
 class ScheduleViewSet(viewsets.ModelViewSet):
     queryset = Schedule.objects.all()
     serializer_class = ScheduleSerializer
-    permission_classes = [IsSupervisorUser, IsStudentUser] # TODO change into new permissions system
+    permission_classes = [permissions.IsStudentOrAboveUser] # CHECK if too much permission to student
 
     @action(detail=False, methods=['get'], url_path='search')
     def search(self, request):
