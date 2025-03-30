@@ -22,4 +22,4 @@ class BranchViewSet(viewsets.ModelViewSet):
 
     queryset = Branch.objects.all()
     serializer_class = BranchSerializer
-    permission_classes = [permissions.IsStudentOrAboveUser] # CHECK if student has too much permissions
+    permission_classes = [permissions.IsAdminUser]
