@@ -5,7 +5,7 @@ class ItemStatusChoices(models.TextChoices):
     LOST = 'LOST', 'Lost'
     FOUND = 'FOUND', 'Found'
     MATCHED = 'MATCHED', 'Matched'
-    CONFIRMED = 'CONFIRMED', 'Confirmed'  # New status for confirmed matches
+    CONFIRMED = 'CONFIRMED', 'Confirmed' 
 
 class LostItem(models.Model):
     item_id = models.AutoField(primary_key=True)
