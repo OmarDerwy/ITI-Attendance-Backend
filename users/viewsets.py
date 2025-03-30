@@ -10,9 +10,13 @@ from .helpers import getGroupIDFromNames
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = models.CustomUser.objects.all().order_by('id')
-    serializer_class = serializers.CustomUserSerializer
-    http_method_names = ['get', 'put', 'patch', 'delete']
+    http_method_names = ['get', 'put', 'patch', 'delete', 'post']
     permission_classes = [permissions.IsAdminUser]
+
+    def get_serializer_class(self):
+        if self.request.method.lower() == 'post':
+            return serializers.UserCreateSerializer
+        return serializers.CustomUserSerializer
 
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
