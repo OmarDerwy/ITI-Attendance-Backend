@@ -74,4 +74,27 @@ class Student(models.Model):
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name} - {self.track.name}"
 
+class PermissionRequest(models.Model):
+    REQUEST_TYPES = [
+        ('early_leave', 'Early Leave'),
+        ('late_check_in', 'Late Check-In'),
+        ('day_excuse', 'Day Excuse'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    student = models.ForeignKey('Student', on_delete=models.CASCADE, related_name='permission_requests')
+    request_type = models.CharField(max_length=20, choices=REQUEST_TYPES)
+    reason = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    schedule = models.ForeignKey('Schedule', on_delete=models.CASCADE, related_name='permission_requests', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.student} - {self.request_type} ({self.status})"
+
 
