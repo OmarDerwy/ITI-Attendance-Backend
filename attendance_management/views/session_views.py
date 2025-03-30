@@ -30,3 +30,26 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(sessions, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='request-excuse')
+    def request_excuse(self, request, pk=None):
+        """
+        Allow students to request an excuse for a session.
+        """
+        attendance_record = self.get_object()
+        excuse_type = request.data.get('excuse', 'none')
+        if excuse_type not in dict(AttendanceRecord.EXCUSE_CHOICES):
+            return Response({'error': 'Invalid excuse type'}, status=400)
+        attendance_record.excuse = excuse_type
+        attendance_record.save()
+        return Response({'message': 'Excuse requested successfully', 'excuse': excuse_type})
+
+    @action(detail=True, methods=['post'], url_path='request-early-leave')
+    def request_early_leave(self, request, pk=None):
+        """
+        Allow students to request early leave for a session.
+        """
+        attendance_record = self.get_object()
+        attendance_record.early_leave = 'pending'
+        attendance_record.save()
+        return Response({'message': 'Early leave requested successfully', 'status': 'pending'})

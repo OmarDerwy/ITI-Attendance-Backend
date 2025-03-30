@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord
+from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest
 
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -34,3 +34,9 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceRecord
         fields = ['id', 'student', 'schedule', 'check_in_time', 'check_out_time', 'excuse', 'early_leave', 'late_check_in']
+
+class PermissionRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PermissionRequest
+        fields = ['id', 'student', 'schedule', 'request_type', 'reason', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status']
