@@ -13,9 +13,13 @@ class CustomUserManager(BaseUserManager):
         if not email:
             raise ValueError('The Email must be set')
         email = self.normalize_email(email)
+        groups = extra_fields.pop('groups', None)
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save()
+        if groups:
+            group_objs = Group.objects.filter(name__in=groups)
+            user.groups.set(group_objs)
         return user
 
     def create_superuser(self, email, password, **extra_fields):
@@ -30,7 +34,7 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
         return self.create_user(email, password, **extra_fields)
 
-class CustomUser(AbstractUser):
+class CustomUser(AbstractUser): # FIXME order response for GET users
 
     username = None
     email = models.EmailField(unique=True, validators=[validate_email])
@@ -39,22 +43,25 @@ class CustomUser(AbstractUser):
     last_name = models.CharField(max_length=30, blank=True, null=True)
     student_info = models.OneToOneField('attendance_management.StudentInfo', on_delete=models.CASCADE, related_name='users', null=True)
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []  # Remove username from required fields
+    REQUIRED_FIELDS = ['groups']  # Remove username from required fields
 
     objects = CustomUserManager()  # Use the custom manager
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.email})"
         
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # Save the user first
-        if not self.groups.exists():  # If no groups are assigned
-            student_group, created = Group.objects.get_or_create(name='student')
-            self.groups.add(student_group)
-        if 'admin' in self.groups.values_list('name', flat=True):
-            self.is_staff = True
-            self.is_superuser = True
-    #     # Auto-generate username from email if not provided
-    #     if not self.username:
-    #         self.username = self.email
-    #     super().save(*args, **kwargs)
+    # def save(self, *args, **kwargs):
+    #     super().save(*args, **kwargs)  # Save the user first
+    #     if not self.groups.exists():  # If no groups are assigned
+    #         student_group, created = Group.objects.get_or_create(name='student')
+    #         self.groups.add(student_group)
+    #     else:
+    #         # Handle single string for groups and convert to list
+    #         if isinstance(self.groups, str):
+    #             group_names = [self.groups]
+    #             group_objs = Group.objects.filter(name__in=group_names)
+    #             self.groups.set(group_objs)
+
+    #     if 'admin' in self.groups.values_list('name', flat=True):
+    #         self.is_staff = True
+    #         self.is_superuser = True
