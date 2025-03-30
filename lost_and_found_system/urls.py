@@ -9,7 +9,6 @@ router.register(r'matched-items', MatchedItemViewSet, basename='matcheditem')
 router.register(r'notifications', NotificationViewSet, basename="notification")
 router.register(r'', AllItemsViewSet, basename='allitem')
 
-
 urlpatterns = [
     path('', include(router.urls)),
 ]

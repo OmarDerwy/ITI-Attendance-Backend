@@ -79,19 +79,8 @@ class MatchedItem(models.Model):
         ]
 
     def save(self, *args, **kwargs):
+        # Remove notification logic from the save method
         super().save(*args, **kwargs)
-        if self.similarity_score > 70:
-            channel_layer = get_channel_layer()
-            group_name = f"user_{self.lost_item.user.id}" if self.lost_item.user.is_authenticated else "anonymous"
-            message = {
-                "type": "send_notification",
-                "message": {
-                    "title": "Item Matched!",
-                    "body": f"Your lost item '{self.lost_item.name}' has been matched with a found item '{self.found_item.name}' with a similarity score of {self.similarity_score:.2f}%."
-                }
-            }
-            logger.info(f"Sending notification to group: {group_name} with message: {message}")
-            async_to_sync(channel_layer.group_send)(group_name, message)
 
 class Notification(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="notifications")

@@ -6,26 +6,27 @@ logger = logging.getLogger(__name__)
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        # Log the headers sent with the WebSocket connection
-        headers = dict(self.scope.get("headers", []))
-        auth_header = headers.get(b"authorization", b"").decode("utf-8")
-        logger.info(f"WebSocket connection headers: {headers}")
-        logger.info(f"Authorization header: {auth_header}")
-
+        # Reject connection if the user is anonymous
         if self.scope["user"].is_anonymous:
-            self.group_name = "anonymous"
-            logger.info("Anonymous user connected to WebSocket.")
-        else:
-            self.group_name = f"user_{self.scope['user'].id}"
-            logger.info(f"User {self.scope['user'].id} connected to WebSocket.")
+            logger.info("Anonymous user attempted to connect to WebSocket. Connection rejected.")
+            await self.close()
+            return
 
+        # Assign group name based on the user's ID
+        self.group_name = f"user_{self.scope['user'].id}"
+        logger.info(f"User {self.scope['user'].id} connected to WebSocket.")
+
+        # Add the user to the group
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.group_name, self.channel_name)
-        logger.info(f"Disconnected from WebSocket: {self.group_name}")
+        # Remove the user from the group only if group_name is set
+        if hasattr(self, "group_name"):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            logger.info(f"User {self.scope['user'].id} disconnected from WebSocket.")
 
     async def send_notification(self, event):
+        # Send notification to the WebSocket
         logger.info(f"Sending notification to WebSocket: {event['message']}")
         await self.send(text_data=json.dumps(event["message"]))

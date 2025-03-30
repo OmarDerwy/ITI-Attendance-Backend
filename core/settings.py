@@ -204,3 +204,41 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',  # Set the logging level to INFO
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',  # Use the simple formatter
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',  # Suppress root-level logs unless they are warnings or higher
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Show only endpoint logs from Django
+            'propagate': False,
+        },
+        'lost_and_found_system': {
+            'handlers': ['console'],
+            'level': 'DEBUG',  # Show all logs from your app
+            'propagate': False,
+        },
+    },
+}
