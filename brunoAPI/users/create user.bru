@@ -5,23 +5,23 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/api/v1/accounts/auth/users/
+  url: http://localhost:8000/api/v1/accounts/users/
   body: none
   auth: inherit
 }
 
 script:pre-request {
   const {faker} = require('@faker-js/faker')
-  const first_name = faker.person.firstName()
-  const last_name = faker.person.lastName()
+  // const first_name = faker.person.firstName()
+  // const last_name = faker.person.lastName()
   const email = faker.internet.email()
   const password = faker.internet.password()
+  const groups = [1]
   
   req.setBody({
-    first_name,
-    last_name,
     email,
-    password
+    password,
+    groups
   })
 }
 
