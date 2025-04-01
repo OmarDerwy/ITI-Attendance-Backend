@@ -41,7 +41,6 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
-    student_info = models.OneToOneField('attendance_management.StudentInfo', on_delete=models.CASCADE, related_name='users', null=True)
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['groups']  # Remove username from required fields
 

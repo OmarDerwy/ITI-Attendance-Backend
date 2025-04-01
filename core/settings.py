@@ -50,7 +50,7 @@ INSTALLED_APPS = [
     'djoser',
     'drf_spectacular',
     'users',
-    'lost_and_found_system',
+    # 'lost_and_found_system',
     'django_extensions',
     'channels',
 

@@ -10,7 +10,7 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
     ViewSet for managing permission requests.
     Students can create requests, while supervisors or admins can view, approve, or reject them.
     """
-    queryset = PermissionRequest.objects.select_related('student__user').all()
+    queryset = PermissionRequest.objects.select_related('student__user').all()  # Updated to use Student
     serializer_class = PermissionRequestSerializer
 
     def get_permissions(self):
