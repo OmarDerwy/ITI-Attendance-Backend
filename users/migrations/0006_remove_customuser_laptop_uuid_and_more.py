@@ -7,7 +7,6 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('attendance_management', '0002_rename_student_studentinfo'),
         ('users', '0005_remove_customuser_username'),
     ]
 
@@ -19,10 +18,5 @@ class Migration(migrations.Migration):
         migrations.RemoveField(
             model_name='customuser',
             name='phone_uuid',
-        ),
-        migrations.AddField(
-            model_name='customuser',
-            name='student_info',
-            field=models.OneToOneField(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='users', to='attendance_management.studentinfo'),
-        ),
+        )
     ]

@@ -1,9 +1,9 @@
 from rest_framework import viewsets
-from ..models import StudentInfo
+from ..models import Student
 from ..serializers import StudentSerializer
 from core import permissions
 
 class StudentViewSet(viewsets.ModelViewSet):
-    queryset = StudentInfo.objects.select_related('user', 'track').all()
+    queryset = Student.objects.select_related('user', 'track').all()  # Updated to use Student
     serializer_class = StudentSerializer
-    permission_classes = [permissions.IsStudentOrAboveUser] # CHECK if too much permissions to student
+    permission_classes = [permissions.IsStudentOrAboveUser]  # CHECK if too much permissions to student
