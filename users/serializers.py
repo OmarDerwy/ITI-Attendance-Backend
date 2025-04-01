@@ -48,3 +48,8 @@ class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = ['id', 'name']
+
+class UserActivateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['is_active']

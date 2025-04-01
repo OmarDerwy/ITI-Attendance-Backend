@@ -4,8 +4,37 @@ meta {
   seq: 1
 }
 
-get {
-  url: http://localhost:8000/api/v1/accounts/auth/users/
-  body: multipartForm
-  auth: inherit
+post {
+  url: http://localhost:8000/api/v1/accounts/reset/
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const {faker} = require('@faker-js/faker')
+  const generateUsers = () => {
+    return new Promise((resolve) => {
+      let user_list = []
+      for (let i = 0; i < 5; i++) {
+        let user = {}
+        const email = faker.internet.email()
+        const password = faker.internet.password()
+        const groups = 'student'
+  
+        user = {
+          email,
+          password,
+          groups
+        }
+        user_list.push(user)
+      }
+      resolve(user_list)
+    })
+  }
+  
+  generateUsers().then((user_list) => {
+    req.setBody({
+      users: user_list
+    })
+  })
 }
