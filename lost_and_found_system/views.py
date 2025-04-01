@@ -21,13 +21,18 @@ class AllItemsViewSet(viewsets.ModelViewSet):
     API endpoint to view all lost and found items.
     """
     serializer_class = ItemSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
     logger.info("AllItemsViewSet initialized")
 
     def get_queryset(self):
-        LostItems = LostItem.objects.all()
-        FoundItems = FoundItem.objects.all()
+        
+        if not self.request.user.is_staff:
+            LostItems = LostItem.objects.filter(user = self.request.user)
+            FoundItems = FoundItem.objects.filter(user = self.request.user)
+        else:
+            LostItems = LostItem.objects.all()
+            FoundItems = FoundItem.objects.all()
         return list(chain(LostItems, FoundItems))
 
 class LostItemViewSet(viewsets.ModelViewSet):
