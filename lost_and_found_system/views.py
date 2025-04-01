@@ -1,15 +1,19 @@
 from itertools import chain
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, permissions
-from .models import LostItem, FoundItem, MatchedItem
-from .serializers import LostItemSerializer, FoundItemSerializer, MatchedItemSerializer, ItemSerializer
+from .models import LostItem, FoundItem, MatchedItem, Notification, ItemStatusChoices
+from .serializers import LostItemSerializer, FoundItemSerializer, MatchedItemSerializer, ItemSerializer, NotificationSerializer
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import logging
+from .utils import match_lost_and_found_items
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class AllItemsViewSet(viewsets.ModelViewSet):
@@ -19,6 +23,7 @@ class AllItemsViewSet(viewsets.ModelViewSet):
     serializer_class = ItemSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
+    logger.info("AllItemsViewSet initialized")
 
     def get_queryset(self):
         
@@ -46,7 +51,20 @@ class LostItemViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        logger.info("perform_create method called.")  # Add this line
+        # Save the found item
+        lost_item = serializer.save(user=self.request.user)
+        logger.info(f"LostItem created: {lost_item}")
+
+        # Match the found item with all lost items
+        found_items = FoundItem.objects.filter(status=ItemStatusChoices.FOUND)
+        logger.info(f"Matching FoundItem with {found_items.count()} LostItems")
+        for found_item in found_items:
+            match_result = match_lost_and_found_items(lost_item, found_item)
+            if match_result:
+                logger.info(f"Match created: {match_result}")
+            else:
+                logger.info(f"No match found for LostItem: {lost_item.name} and FoundItem: {found_item.name}")
 
 
 
@@ -67,7 +85,20 @@ class FoundItemViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        logger.info("perform_create method called.")  # Add this line
+        # Save the found item
+        found_item = serializer.save(user=self.request.user)
+        logger.info(f"FoundItem created: {found_item}")
+
+        # Match the found item with all lost items
+        lost_items = LostItem.objects.filter(status=ItemStatusChoices.LOST)
+        logger.info(f"Matching FoundItem with {lost_items.count()} LostItems")
+        for lost_item in lost_items:
+            match_result = match_lost_and_found_items(lost_item, found_item)
+            if match_result:
+                logger.info(f"Match created: {match_result}")
+            else:
+                logger.info(f"No match found for LostItem: {lost_item.name} and FoundItem: {found_item.name}")
 
     @action(detail=False, methods=['GET'])
     def my_found_items(self, request):
@@ -127,3 +158,87 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
         match.status = new_status
         match.save()
         return Response({"message": "Match status updated successfully."})
+
+    @action(detail=True, methods=['POST'], url_path='update-status', url_name='update-status')
+    def update_status(self, request, pk=None):
+        """
+        Allow the user to update the status of a MatchedItem from FAILED to SUCCEEDED
+        and notify the user who submitted the FoundItem in real-time.
+        """
+        match = get_object_or_404(MatchedItem, pk=pk)
+
+        # Ensure the user is authorized to update the status
+        if match.lost_item.user != request.user:
+            return Response({"error": "You are not authorized to update this match."}, status=403)
+
+        # Check the current status
+        if match.status != MatchedItem.MatchingResult.FAILED:
+            return Response({"error": "Only matches with status 'FAILED' can be updated."}, status=400)
+
+        # Update the status to SUCCEEDED
+        match.status = MatchedItem.MatchingResult.SUCCEEDED
+        match.save()
+
+        # Notify the user who submitted the FoundItem
+        found_item_user = match.found_item.user
+        lost_item_owner_name = match.lost_item.user.email
+        notification_message = (
+            f"Congratulations! We found the owner of the item you submitted: '{match.found_item.name}'. "
+            f"The owner's name is {match.lost_item.user}."
+        )
+
+        # Create a notification in the database
+        Notification.objects.create(
+            user=found_item_user,
+            message=notification_message
+        )
+
+        # Send a real-time WebSocket notification
+        channel_layer = get_channel_layer()
+        group_name = f"user_{found_item_user.id}"
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                "type": "send_notification",
+                "message": {
+                    "title": "Owner Found!",
+                    "body": notification_message
+                }
+            }
+        )
+
+        return Response({
+            "message": "Match status updated to SUCCEEDED.",
+            "notification": notification_message
+        })
+    
+class NotificationViewSet(viewsets.ModelViewSet):
+    queryset = Notification.objects.all()
+    serializer_class = NotificationSerializer
+    permission_classes=[IsAuthenticated]
+    
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if not self.request.user.is_staff:
+            qs = qs.filter(user=self.request.user)  # Users only see their own items
+        return qs
+    
+    @action(detail=False, methods=["GET"])
+    def unread(self, request):
+        """Get unread notifications"""
+        unread_notifications = self.get_queryset().filter(is_read=False)
+        serializer = self.get_serializer(unread_notifications, many=True)
+        return Response(serializer.data)
+    @action(detail=True, methods=["POST"])
+    def mark_as_read(self, request, pk=None):
+        """Mark a notification as read"""
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        return Response({"status": "Notification marked as read"})
+    
+    @action(detail=False, methods=["POST"])
+    def mark_all_as_read(self, request):
+        """Mark all notifications as read for the user"""
+        self.get_queryset().update(is_read=True)
+        return Response({"status": "All notifications marked as read"})
