@@ -176,10 +176,10 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Notify the user who submitted the FoundItem
         found_item_user = match.found_item.user
-        lost_item_owner_name = match.lost_item.user.username
+        lost_item_owner_name = match.lost_item.user.email
         notification_message = (
             f"Congratulations! We found the owner of the item you submitted: '{match.found_item.name}'. "
-            f"The owner's name is {lost_item_owner_name}."
+            f"The owner's name is {match.lost_item.user}."
         )
 
         # Create a notification in the database
