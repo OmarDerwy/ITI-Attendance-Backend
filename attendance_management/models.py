@@ -57,6 +57,7 @@ class Student(models.Model):  # Renamed from StudentInfo
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='students')
     phone_uuid = models.CharField(max_length=100, blank=True, null=True)
     laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
+    is_checked_in = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name} - {self.track.name}"
