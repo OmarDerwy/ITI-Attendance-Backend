@@ -32,7 +32,7 @@ SECRET_KEY = 'django-insecure-9j41$k*nn8e$2^(1jcm^5c68cj1aofg$#ag-*p-3y9ya0k1d8u
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '192.168.1.115', '127.0.0.1', '*']
 
 
 # Application definition
@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
     'djoser',
@@ -51,10 +52,13 @@ INSTALLED_APPS = [
     'users',
     'lost_and_found_system',
     'django_extensions',
+    'channels',
+
     'attendance_management',
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -65,6 +69,13 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'core.urls'
+CORS_ALLOW_ALL_ORIGINS = True  
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "authorization",
+    "content-type",
+]
+ALLOWED_HOSTS = ["*"]  # Allow all hosts for testing (not recommended for production)
 
 TEMPLATES = [
     {
@@ -83,7 +94,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'core.wsgi.application'
-
+ASGI_APPLICATION = 'core.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -122,6 +133,14 @@ AUTH_PASSWORD_VALIDATORS = [ # will enable again in production
     # },
 ]
 
+# email settings
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_HOST')
+EMAIL_PORT = os.getenv('EMAIL_PORT')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS') == 'True'
+EMAIL_HOST_USER = os.getenv('EMAIL_USER')
+DEFAULT_FROM_EMAIL = os.getenv('EMAIL_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD')
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
@@ -211,4 +230,48 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     # OTHER SETTINGS
+}
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',  # Set the logging level to INFO
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',  # Use the simple formatter
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',  # Suppress root-level logs unless they are warnings or higher
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Show only endpoint logs from Django
+            'propagate': False,
+        },
+        'lost_and_found_system': {
+            'handlers': ['console'],
+            'level': 'DEBUG',  # Show all logs from your app
+            'propagate': False,
+        },
+    },
 }

@@ -41,7 +41,7 @@ class CustomUserSerializer(BaseUserSerializer):
     class Meta(BaseUserSerializer.Meta):
         model = User
         fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'student_info', 'is_staff', 'is_superuser']
-        read_only_fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'student_info',]
+        read_only_fields = ['id', 'email', 'groups', 'phone_number', 'student_info',] # TODO create more specific permissions later
     
 
 class GroupSerializer(serializers.ModelSerializer):

@@ -6,6 +6,12 @@ from django.contrib.auth.models import Group
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .helpers import getGroupIDFromNames
+from django.core.mail import send_mail
+from django.utils.crypto import get_random_string
+from rest_framework.exceptions import ValidationError
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import AccessToken
+
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -79,3 +85,53 @@ class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
     serializer_class = serializers.GroupSerializer
     permission_classes = [core_permissions.IsAdminUser]
+
+class ResetPassword(APIView):
+    permission_classes = [core_permissions.IsAdminUser]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email')
+        if not email:
+            raise ValidationError({'email': 'This field is required.'})
+
+        try:
+            user = models.CustomUser.objects.get(email=email)
+        except models.CustomUser.DoesNotExist:
+            raise ValidationError({'email': 'User with this email does not exist.'})
+
+        token = access_token = AccessToken.for_user(user)
+
+        reset_url = f"{request.build_absolute_uri('/reset-password-confirmation/')}{token}/"
+        send_mail(
+            subject="Password Reset Request",
+            message=f"Click the link below to reset your password:\n{reset_url}",
+            from_email="omarderwy@gmail.com",
+            recipient_list=[email],
+        )
+        return Response({'message': 'Password reset email sent successfully.'})
+
+
+class ResetPasswordConfirmation(APIView):
+    permission_classes = [core_permissions.IsAdminUser]
+
+    def post(self, request, *args, **kwargs):
+        token = kwargs.get('token')
+        new_password = request.data.get('new_password')
+        if not new_password:
+            raise ValidationError({'new_password': 'This field is required.'})
+
+        try:
+            user = models.CustomUser.objects.get(email=request.data.get('email'))
+        except models.CustomUser.DoesNotExist:
+            raise ValidationError({'email': 'User with this email does not exist.'})
+
+        try:
+            access_token = AccessToken(token)
+            if access_token['user_id'] != user.id:
+                raise ValidationError({'token': 'Invalid token for the provided user.'})
+        except Exception:
+            raise ValidationError({'token': 'Invalid or expired token.'})
+
+        user.set_password(new_password)
+        user.save()
+        return Response({'message': 'Password has been reset successfully.'})

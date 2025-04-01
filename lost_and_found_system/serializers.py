@@ -1,5 +1,10 @@
 from rest_framework import serializers
-from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices
+from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices, Notification
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+import logging
+
+logger = logging.getLogger(__name__)
 
 class LostItemSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
@@ -20,14 +25,19 @@ class FoundItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['item_id', 'found_at']
 
 class MatchedItemSerializer(serializers.ModelSerializer):
-    lost_item = LostItemSerializer(read_only=True)
-    found_item = FoundItemSerializer(read_only=True)
+    lost_item_details = LostItemSerializer(source='lost_item', read_only=True)
+    found_item_details = FoundItemSerializer(source='found_item', read_only=True)
+    lost_item = serializers.PrimaryKeyRelatedField(queryset=LostItem.objects.all(), write_only=True)
+    found_item = serializers.PrimaryKeyRelatedField(queryset=FoundItem.objects.all(), write_only=True)
     status = serializers.ChoiceField(choices=MatchedItem.MatchingResult.choices)
+    similarity_score = serializers.FloatField()
 
     class Meta:
         model = MatchedItem
-        fields = ['match_id', 'lost_item', 'found_item', 'similarity_score', 'created_at', 'status']
+        fields = ['match_id', 'lost_item', 'found_item', 'lost_item_details', 'found_item_details', 'similarity_score', 'created_at', 'status']
         read_only_fields = ['match_id', 'created_at']
+
+
 class ItemSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     status = serializers.ChoiceField(choices=ItemStatusChoices.choices, read_only=True)
@@ -61,3 +71,8 @@ class ItemSerializer(serializers.ModelSerializer):
             self.Meta.model = LostItem
         
         return super().to_representation(instance)
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = '__all__'
