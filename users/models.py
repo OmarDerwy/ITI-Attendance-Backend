@@ -49,6 +49,10 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.email})"
+    
+    def delete(self, using=None, keep_parents=False):
+        self.groups.clear()
+        super().delete(using, keep_parents)
         
     # def save(self, *args, **kwargs):
     #     super().save(*args, **kwargs)  # Save the user first

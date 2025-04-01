@@ -14,6 +14,7 @@ pillow = "*"
 djangorestframework-simplejwt = "*"
 psycopg2-binary = "*"
 pyjwt = "*"
+django-cors-headers = "*"
 
 [dev-packages]
 django-shortcuts = "*"
