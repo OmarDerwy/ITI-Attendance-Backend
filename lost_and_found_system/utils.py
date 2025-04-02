@@ -6,6 +6,8 @@ from sentence_transformers import SentenceTransformer
 from .models import MatchedItem, LostItem, FoundItem
 from .serializers import MatchedItemSerializer
 import logging
+import requests
+from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +22,19 @@ def calculate_text_similarity(text1, text2):
     similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
     return similarity
 
-def calculate_image_similarity(image1_path, image2_path):
+def calculate_image_similarity(image1_url, image2_url):
     """
     Calculate similarity between two images using OpenCV and structural similarity.
+    Accepts image URLs instead of file paths.
     """
     try:
-        # Open images using Pillow
-        img1 = Image.open(image1_path).convert('L')  # Convert to grayscale
-        img2 = Image.open(image2_path).convert('L')
+        # Download images from URLs
+        img1_response = requests.get(image1_url)
+        img2_response = requests.get(image2_url)
+        
+        # Open images using Pillow from response content
+        img1 = Image.open(BytesIO(img1_response.content)).convert('L')  # Convert to grayscale
+        img2 = Image.open(BytesIO(img2_response.content)).convert('L')
 
         # Resize images to the same size
         img1 = img1.resize((256, 256))
@@ -66,7 +73,7 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
     image_similarity = 0
     if lost_item.image and found_item.image:
         image_similarity = calculate_image_similarity(
-            lost_item.image.path, found_item.image.path
+            lost_item.image, found_item.image  # Pass URLs directly instead of .path
         )
         logger.info(f"Image similarity between '{lost_item.name}' and '{found_item.name}': {image_similarity:.2f}")
     else:

@@ -23,7 +23,7 @@ class LostItem(models.Model):
     )
     place = models.CharField(max_length=100)
     lost_at = models.DateTimeField(auto_now_add=True)
-    image = models.ImageField(upload_to='lost_item_images/', blank=True, null=True)
+    image = models.URLField(max_length=500, verbose_name='Image URL', blank=True, null=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='lost_items')
 
     def __str__(self):
@@ -43,7 +43,7 @@ class FoundItem(models.Model):
     )
     place = models.CharField(max_length=100)
     found_at = models.DateTimeField(auto_now_add=True)
-    image = models.ImageField(upload_to='found_item_images/', blank=True, null=True)
+    image = models.URLField(max_length=500, verbose_name='Image URL', blank=True, null=True)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='found_items')
 
     def __str__(self):
