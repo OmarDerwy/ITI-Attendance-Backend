@@ -40,7 +40,7 @@ class CustomUserSerializer(BaseUserSerializer):
     groups = serializers.StringRelatedField(many=True)
     class Meta(BaseUserSerializer.Meta):
         model = User
-        fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'is_staff', 'is_superuser']
+        fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'is_staff', 'is_superuser', 'is_active']
         read_only_fields = ['id', 'email', 'groups', 'phone_number'] # TODO create more specific permissions later
     
 
@@ -53,3 +53,26 @@ class UserActivateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['is_active']
+
+class StudentsSerializer(serializers.ModelSerializer):
+    tracks = serializers.StringRelatedField(source='student_profile.track')
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'tracks', 'is_active']
+        read_only_fields = ['id', 'email'] # TODO create more specific permissions later
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['groups'] = [group.name for group in instance.groups.all()]
+        return representation
+    def to_internal_value(self, data):
+        internal_value = super().to_internal_value(data)
+        track = data.get('track')
+        if track:
+            try:
+                track_id = int(track)
+                internal_value['student_profile'] = {'track': track_id}
+            except ValueError:
+                raise serializers.ValidationError({'track': 'Track ID must be an integer.'})
+        return internal_value
