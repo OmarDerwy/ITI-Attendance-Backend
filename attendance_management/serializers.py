@@ -19,7 +19,7 @@ class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
         fields = ['id', 'user', 'track']
 
 class TrackSerializer(serializers.ModelSerializer):
-    branch = serializers.StringRelatedField()
+    default_branch = serializers.StringRelatedField()
 
     class Meta:
         model = Track
