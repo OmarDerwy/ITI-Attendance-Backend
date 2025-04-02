@@ -12,18 +12,58 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
+# import from attendance_management
+from attendance_management import models as attend_models
+
 
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = models.CustomUser.objects.all().order_by('id')
     http_method_names = ['get', 'put', 'patch', 'delete', 'post']
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [core_permissions.IsInstructorOrAboveUser]
+
+    # def get_queryset(self):               #deprecated
+    #     user = self.request.user
+    #     userGroups = user.groups.all()
+    #     if 'supervisor' in userGroups.values_list('name', flat=True):
+    #         # If the user is a supervisor, filter the queryset to only include their students
+    #         hisTrack = user.tracks.get()
+    #         StudentObjs = models.CustomUser.objects.filter(student_profile__track=hisTrack)
+    #         return StudentObjs.order_by('id')
+    #     return models.CustomUser.objects.all().order_by('id')
+    
 
     def get_serializer_class(self):
         if self.request.method.lower() == 'post':
             return serializers.UserCreateSerializer
         return serializers.CustomUserSerializer
+    @action(detail=False, methods=['get'], url_path='students')
+    def students_list(self, request):
+        group = Group.objects.get(name="student")
+        data = self.get_queryset().filter(groups=group)
+        serializer = self.get_serializer(data, many=True)
+        return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], url_path='instructors')
+    def instructors_list(self, request):
+        group = Group.objects.get(name="instructor")
+        data = self.get_queryset().filter(groups=group)
+        serializer = self.get_serializer(data, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='supervisors')
+    def supervisors_list(self, request):
+        group = Group.objects.get(name="supervisor")
+        data = self.get_queryset().filter(groups=group)
+        serializer = self.get_serializer(data, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='admins')
+    def admins_list(self, request):
+        group = Group.objects.get(name="admin")
+        data = self.get_queryset().filter(groups=group)
+        serializer = self.get_serializer(data, many=True)
+        return Response(serializer.data)
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
     def user_groups(self, request, *args, **kwargs):
@@ -136,57 +176,170 @@ class ResetPasswordConfirmation(APIView):
         user.save()
         return Response({'message': 'Password has been reset successfully.'})
 
-class BulkCreateUsers(APIView):
+class StudentViewSet(viewsets.ModelViewSet):
+
+    serializer_class = serializers.StudentsSerializer
     permission_classes = [core_permissions.IsSupervisorOrAboveUser]
+
+    def get_queryset(self):
+        requestUser = self.request.user
+        requestUserGroups = requestUser.groups.all()
+        allUsers = models.CustomUser.objects.all()
+        students = allUsers.filter(groups__name='student') # TODO not all students actually possess the student group, need to fix database later
+        if 'supervisor' in requestUserGroups.values_list('name', flat=True):
+            hisTrack = requestUser.tracks.get()
+            students = students.filter(student_profile__track=hisTrack)
+            return students.order_by('id')
+        return students.order_by('id')
+
+    def create(self, request, *args, **kwargs):
+        # Check supervisor permissions
+        request_user = self.request.user
+        if 'supervisor' not in request_user.groups.all().values_list('name', flat=True):
+            return Response({'error': 'You do not have permission to create users'}, status=403)
+        
+        # Find the supervisor's track
+        track_obj = request_user.tracks.first()
+        if not track_obj:
+            return Response({'error': 'You are not currently the supervisor of any track'}, status=400)
+        
+        # Extract required data
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=400)
+        
+        # Create the user with basic information
+        password = 'test'  # In production: get_random_string(length=8)
+        user = models.CustomUser.objects.create_user(
+            email=email,
+            password=password,
+            is_active=False,
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number')
+        )
+        
+        # Create student profile and associate with track
+        student_profile = attend_models.Student.objects.create(track=track_obj, user=user)
+        
+        # Add student group
+        student_group = Group.objects.get(name='student')
+        user.groups.add(student_group)
+        
+        # Create activation token and URL
+        access_token = AccessToken.for_user(user)
+        create_password_url = f"http://localhost:8080/activate/{access_token}/"
+        
+        # For development: print the link
+        print(f"Confirmation link for {email}: {create_password_url}")
+        
+        # For production: send email (commented out)
+        # send_mail(
+        #     subject="Account Activation",
+        #     message=f"Click the link below to activate your account:\n{create_password_url}",
+        #     from_email="omarderwy@gmail.com",
+        #     recipient_list=[email],
+        # )
+        
+        # Serialize and return the created user
+        serializer = self.get_serializer(user)
+        return Response({
+            'user': serializer.data,
+            'confirmation_link': create_password_url
+        }, status=201)
+
+class BulkCreateStudents(APIView):
+    permission_classes = [core_permissions.IsSupervisorOrAboveUser]
+    http_method_names = ['post']
+
+    confirmation_links = {}
     def post(self, request, *args, **kwargs):
+        requestUser = self.request.user
+        requestUserGroups = requestUser.groups.all()
         data = request.data
         users = data.get('users', [])
         if not users:
             return Response({'error': 'No user data provided'}, status=400)
-
+        if 'supervisor' not in requestUserGroups.values_list('name', flat=True):
+            return Response({'error': 'You do not have permission to create users'}, status=403)
         for user_data in users:
             email = user_data.get('email')
-            password = user_data.get('password')
-            groups = user_data.get('groups', [])
-            if not isinstance(groups, list):
-                groups = [groups]
-            if not email or not password:
-                return Response({'error': 'Email and password are required for all users'}, status=400)
-            # create random password
-            password = get_random_string(length=8)
+            # groups = user_data.get('groups', [])
+            first_name = user_data.get('first_name')
+            last_name = user_data.get('last_name')
+            phone_number = user_data.get('phone_number')
+
+            # find track
+            track_obj = requestUser.tracks.first()
+            if not track_obj:
+                return Response({'error': f'You currently are the supervisor of any track.'}, status=400)
+
+            print(f"Creating user with email: {email}, track: {track_obj}, track_name: {track_obj}")
+
+            if not email:
+                return Response({'error': 'Email is required for all users'}, status=400)
+            # create random password ( uncomment this in production)
+            # password = get_random_string(length=8)
+            password = 'test'
             print(f"Generated password for {email}: {password}")
             # Create the user
-            user = models.CustomUser.objects.create_user(email=email, password=password, is_active=False)
+            user = models.CustomUser.objects.create_user(
+                email=email,
+                password=password,
+                is_active=False,
+                first_name=first_name,
+                last_name=last_name,
+                phone_number=phone_number
+            )
+
+            # create student_profile
+            student_profile = attend_models.Student.objects.create(track=track_obj, user=user)
+            student_profile.save()
+
+            # add student group to user
+            studentGroup = Group.objects.get(name='student')
+            user.groups.add(studentGroup)
+
             # create tokens for users
             access_token = AccessToken.for_user(user)
             create_password_url= f"http://localhost:8080/activate/{access_token}/"
-            # Assign groups to the user
-            group_ids = getGroupIDFromNames(groups)
-            if isinstance(group_ids, Response):
-                return group_ids
-            user.groups.add(*group_ids)
-            # Send email with activation link
 
-            send_mail(
-                subject="Password Reset Request",
-                message=f"Click the link below to activate your account:\n{create_password_url}",
-                from_email="omarderwy@gmail.com",
-                recipient_list=[email],
-            )
+            # aggregate confirmation links
+            print(f"Confirmation link for {email}: {create_password_url}")
+            self.confirmation_links[email] = create_password_url
+            
+            # uncomment this in production
+            # send_mail(
+            #     subject="Password Reset Request",
+            #     message=f"Click the link below to activate your account:\n{create_password_url}",
+            #     from_email="omarderwy@gmail.com",
+            #     recipient_list=[email],
+            # )
 
 
-        return Response({'message': 'Bulk user creation successful!'})
+        return Response({'message': 'Bulk user creation successful!', 'confirmation_links': self.confirmation_links})
 
-class UserActivateView(RetrieveUpdateAPIView):
-    queryset = models.CustomUser.objects.all()
-    serializer_class = serializers.UserActivateSerializer
-    permission_classes = [permissions.IsAuthenticated]
+class UserActivateView(APIView):
+    permission_classes = [permissions.AllowAny]
 
-    def get_object(self):
-        user = super().get_object()
+    def patch(self, request):
+        token = request.data.get('token')
+        token = token['token']
+        if not token:
+            raise ValidationError({'token': 'This field is required.'})
+
+        try:
+            access_token = AccessToken(bytes(token, 'utf-8'))
+            user_id = access_token['user_id']
+            user = models.CustomUser.objects.get(id=user_id)
+        except models.CustomUser.DoesNotExist:
+            raise ValidationError({'error': 'User does not exist.'})
+        except Exception:
+            raise ValidationError({'token': 'Invalid or expired token.'})
+
         if user.is_active:
-            raise ValidationError({'error': 'User is already active.'})
-        return user
+            return Response({'message': 'User is already active.'}, status=400)
 
-    def perform_update(self, serializer):
-        serializer.save(is_active=True)
+        user.is_active = True
+        user.save()
+        return Response({'message': 'User has been activated successfully.'})

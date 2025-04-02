@@ -1,0 +1,11 @@
+meta {
+  name: getAllSupervisors
+  type: http
+  seq: 2
+}
+
+get {
+  url: http://localhost:8000/api/v1/accounts/users/supervisors
+  body: none
+  auth: inherit
+}
