@@ -6,6 +6,15 @@ meta {
 
 post {
   url: http://localhost:8000/api/v1/attendance/check-out/
-  body: none
+  body: json
   auth: inherit
+}
+
+body:json {
+  {
+    "user_id": 34,
+    "uuid": "test-device-uuid",
+    "latitude": 29.9929,
+    "longitude": 31.6049 
+  }
 }
