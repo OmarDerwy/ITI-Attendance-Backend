@@ -99,7 +99,7 @@ class ResetPassword(APIView):
         except models.CustomUser.DoesNotExist:
             raise ValidationError({'email': 'User with this email does not exist.'})
 
-        token = access_token = AccessToken.for_user(user)
+        token = AccessToken.for_user(user)
 
         reset_url = f"{request.build_absolute_uri('/reset-password-confirmation/')}{token}/"
         send_mail(
@@ -135,3 +135,58 @@ class ResetPasswordConfirmation(APIView):
         user.set_password(new_password)
         user.save()
         return Response({'message': 'Password has been reset successfully.'})
+
+class BulkCreateUsers(APIView):
+    permission_classes = [core_permissions.IsSupervisorOrAboveUser]
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        users = data.get('users', [])
+        if not users:
+            return Response({'error': 'No user data provided'}, status=400)
+
+        for user_data in users:
+            email = user_data.get('email')
+            password = user_data.get('password')
+            groups = user_data.get('groups', [])
+            if not isinstance(groups, list):
+                groups = [groups]
+            if not email or not password:
+                return Response({'error': 'Email and password are required for all users'}, status=400)
+            # create random password
+            password = get_random_string(length=8)
+            print(f"Generated password for {email}: {password}")
+            # Create the user
+            user = models.CustomUser.objects.create_user(email=email, password=password, is_active=False)
+            # create tokens for users
+            access_token = AccessToken.for_user(user)
+            create_password_url= f"http://localhost:8080/activate/{access_token}/"
+            # Assign groups to the user
+            group_ids = getGroupIDFromNames(groups)
+            if isinstance(group_ids, Response):
+                return group_ids
+            user.groups.add(*group_ids)
+            # Send email with activation link
+
+            send_mail(
+                subject="Password Reset Request",
+                message=f"Click the link below to activate your account:\n{create_password_url}",
+                from_email="omarderwy@gmail.com",
+                recipient_list=[email],
+            )
+
+
+        return Response({'message': 'Bulk user creation successful!'})
+
+class UserActivateView(RetrieveUpdateAPIView):
+    queryset = models.CustomUser.objects.all()
+    serializer_class = serializers.UserActivateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        user = super().get_object()
+        if user.is_active:
+            raise ValidationError({'error': 'User is already active.'})
+        return user
+
+    def perform_update(self, serializer):
+        serializer.save(is_active=True)

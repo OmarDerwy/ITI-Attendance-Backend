@@ -19,6 +19,11 @@ class Track(models.Model):
     start_date = models.DateField()
     description = models.TextField()
     default_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='tracks')
+    PROGRAM_CHOICES = [
+        ('intensive', 'Intensive Program'),
+        ('nine_months', '9 months'),
+    ]
+    program_type = models.CharField(max_length=20, choices=PROGRAM_CHOICES, default='nine_months')
 
     def __str__(self):
         return self.name

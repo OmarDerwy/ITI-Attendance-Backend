@@ -40,11 +40,16 @@ class CustomUserSerializer(BaseUserSerializer):
     groups = serializers.StringRelatedField(many=True)
     class Meta(BaseUserSerializer.Meta):
         model = User
-        fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'student_info', 'is_staff', 'is_superuser']
-        read_only_fields = ['id', 'email', 'groups', 'phone_number', 'student_info',] # TODO create more specific permissions later
+        fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'is_staff', 'is_superuser']
+        read_only_fields = ['id', 'email', 'groups', 'phone_number'] # TODO create more specific permissions later
     
 
 class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = ['id', 'name']
+
+class UserActivateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['is_active']

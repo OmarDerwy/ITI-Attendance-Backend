@@ -7,13 +7,15 @@ class TrackViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         user_groups = user.groups.values_list('name', flat=True)
+        queryset = Track.objects.all()
+        program_type = self.request.query_params.get('program_type')
+        if program_type:
+            queryset = queryset.filter(program_type=program_type)
         if 'admin' in user_groups:
-            return Track.objects.all()
-        return Track.objects.select_related('supervisor', 'branch').all()
+            return queryset
+        return queryset.select_related('supervisor', 'branch').all()
     
     def get_permissions(self):
-        if self.action == 'list':
-            return [permissions.IsStudentOrAboveUser(), ]
-        return [permissions.IsSupervisorOrAboveUser(), ]
+        return [permissions.IsAdminUser(), ]
     
     serializer_class = TrackSerializer
