@@ -1,0 +1,20 @@
+meta {
+  name: reset-check-ins
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8000/api/v1/attendance/reset-check-ins/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "user_id": 1,
+    "uuid": "test-device-uuid",
+    "latitude": 29.9929,
+    "longitude": 31.6049 
+  }
+}

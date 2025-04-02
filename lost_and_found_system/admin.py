@@ -7,3 +7,4 @@ admin.site.register(LostItem)
 admin.site.register(FoundItem)
 admin.site.register(MatchedItem)
 admin.site.register(Notification)
+

@@ -1,0 +1,17 @@
+meta {
+  name: reset student
+  type: http
+  seq: 4
+}
+
+post {
+  url: http://localhost:8000/api/v1/attendance/reset-student/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "user_id": 34
+  }
+}
