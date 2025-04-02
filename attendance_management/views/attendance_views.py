@@ -1,5 +1,5 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 import math
@@ -338,6 +338,24 @@ class AttendanceViewSet(viewsets.ViewSet):
         except Student.DoesNotExist:
             return Response({
                 "error": "Student not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['GET'], url_path='status')
+    def is_checked_in(self, request):
+        """
+        Return the is_checked_in status of the logged-in student.
+        """
+        try:
+            # Get the logged-in user's student profile
+            student = Student.objects.get(user=request.user)
+            return Response({
+                "status": "success",
+                "is_checked_in": student.is_checked_in
+            })
+        except Student.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "No student record found for the logged-in user."
             }, status=status.HTTP_404_NOT_FOUND)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
