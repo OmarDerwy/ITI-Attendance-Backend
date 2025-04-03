@@ -1,0 +1,15 @@
+meta {
+  name: track - get by id
+  type: http
+  seq: 5
+}
+
+get {
+  url: http://localhost:8000/api/v1/attendance/tracks?id=1
+  body: multipartForm
+  auth: inherit
+}
+
+params:query {
+  id: 1
+}

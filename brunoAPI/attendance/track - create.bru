@@ -1,0 +1,27 @@
+meta {
+  name: track - create
+  type: http
+  seq: 6
+}
+
+post {
+  url: http://localhost:8000/api/v1/attendance/track/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+      "name": "dsdfsdf",
+      "description": "fdgfg",
+      "supervisor_id": 17,
+      "start_date": "2025-04-11",
+      "program_type": "nine_months",
+      "intake": "33",
+      "branch_id": 10
+  }
+}
+
+body:multipart-form {
+  name: test4
+}

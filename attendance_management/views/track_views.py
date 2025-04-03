@@ -7,13 +7,13 @@ class TrackViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         user_groups = user.groups.values_list('name', flat=True)
-        queryset = Track.objects.all()
+        queryset = Track.objects.select_related('default_branch', 'supervisor')
         program_type = self.request.query_params.get('program_type')
         if program_type:
             queryset = queryset.filter(program_type=program_type)
         if 'admin' in user_groups:
             return queryset
-        return queryset.select_related('supervisor', 'branch').all()
+        return queryset.all()
     
     def get_permissions(self):
         return [permissions.IsAdminUser(), ]

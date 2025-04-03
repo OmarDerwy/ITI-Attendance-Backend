@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest
-
+from users.models import CustomUser
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
@@ -17,21 +17,86 @@ class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
         model = Student
         fields = ['id', 'user', 'track']
-
 class TrackSerializer(serializers.ModelSerializer):
-    branch_id = serializers.IntegerField(source='default_branch.id', read_only=True)
+    branch_id = serializers.IntegerField(write_only=True)  # For POST/PUT requests
+    supervisor_id = serializers.IntegerField(write_only=True)  # For POST/PUT requests
     track_id = serializers.IntegerField(source='id', read_only=True)
-    default_branch = serializers.StringRelatedField()
-    supervisor = serializers.SerializerMethodField()  # Get the supervisor's first and last name
+    default_branch = serializers.StringRelatedField(read_only=True)  # Readable branch name
+    supervisor = serializers.SerializerMethodField(read_only=True)  # Get supervisor full name
+    program_type = serializers.ChoiceField(choices=Track.PROGRAM_CHOICES)
+    program_type_display = serializers.CharField(source='get_program_type_display', read_only=True)
 
     def get_supervisor(self, obj):
         if obj.supervisor:
-            return f"{obj.supervisor.first_name} {obj.supervisor.last_name} "
+            return f"{obj.supervisor.first_name} {obj.supervisor.last_name}"
         return None
-    program_type = serializers.CharField(source='get_program_type_display', read_only=True)
+
+    def to_representation(self, instance):
+        """Customize the GET response to include branch_id and supervisor_id."""
+        representation = super().to_representation(instance)
+        representation['branch_id'] = instance.default_branch.id if instance.default_branch else None
+        representation['supervisor_id'] = instance.supervisor.id if instance.supervisor else None
+        return representation
+
+    def update(self, instance, validated_data):
+        # Get foreign key IDs from request
+        branch_id = validated_data.pop('branch_id', None)
+        supervisor_id = validated_data.pop('supervisor_id', None)
+
+        # Assign new branch and supervisor if provided
+        if branch_id:
+            try:
+                instance.default_branch = Branch.objects.get(id=branch_id)
+            except Branch.DoesNotExist:
+                raise serializers.ValidationError({"branch_id": f"Branch with ID {branch_id} does not exist."})
+
+        if supervisor_id:
+            try:
+                instance.supervisor = CustomUser.objects.get(id=supervisor_id)
+            except CustomUser.DoesNotExist:
+                raise serializers.ValidationError({"supervisor_id": f"User with ID {supervisor_id} does not exist."})
+
+        # Update remaining fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
+
+    def create(self, validated_data):
+        # Extract foreign key IDs
+        branch_id = validated_data.pop('branch_id', None)
+        supervisor_id = validated_data.pop('supervisor_id', None)
+
+        # Ensure branch_id and supervisor_id are provided
+        if not branch_id:
+            raise serializers.ValidationError({"branch_id": "This field is required."})
+        if not supervisor_id:
+            raise serializers.ValidationError({"supervisor_id": "This field is required."})
+
+        # Fetch the default_branch instance
+        try:
+            default_branch = Branch.objects.get(id=branch_id)
+        except Branch.DoesNotExist:
+            raise serializers.ValidationError({"branch_id": f"Branch with ID {branch_id} does not exist."})
+
+        # Fetch the supervisor instance
+        try:
+            supervisor = CustomUser.objects.get(id=supervisor_id)
+        except CustomUser.DoesNotExist:
+            raise serializers.ValidationError({"supervisor_id": f"User with ID {supervisor_id} does not exist."})
+
+        # Assign default_branch and supervisor to validated_data
+        validated_data['default_branch'] = default_branch
+        validated_data['supervisor'] = supervisor
+
+        # Create track object
+        track = Track.objects.create(**validated_data)
+        return track
+
     class Meta:
         model = Track
-        fields = '__all__'  # Ensure branch_id and track_id are included
+        fields = '__all__'
 
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
