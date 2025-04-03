@@ -4,9 +4,13 @@ from ..serializers import TrackSerializer
 from core import permissions
 
 class TrackViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsSupervisorOrAboveUser]
+
     def get_queryset(self):
         user = self.request.user
         user_groups = user.groups.values_list('name', flat=True)
+        if 'supervisor' in user_groups:
+            return Track.objects.filter(supervisor=user)
         queryset = Track.objects.select_related('default_branch', 'supervisor')
         program_type = self.request.query_params.get('program_type')
         if program_type:
@@ -15,7 +19,5 @@ class TrackViewSet(viewsets.ModelViewSet):
             return queryset
         return queryset.all()
     
-    def get_permissions(self):
-        return [permissions.IsAdminUser(), ]
     
     serializer_class = TrackSerializer
