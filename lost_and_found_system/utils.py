@@ -73,7 +73,7 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
     image_similarity = 0
     if lost_item.image and found_item.image:
         image_similarity = calculate_image_similarity(
-            lost_item.image, found_item.image  # Pass URLs directly instead of .path
+            lost_item.image, found_item.image 
         )
         logger.info(f"Image similarity between '{lost_item.name}' and '{found_item.name}': {image_similarity:.2f}")
     else:
@@ -93,7 +93,7 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
         matched_item_data = {
             "lost_item": lost_item.item_id,
             "found_item": found_item.item_id,
-            "similarity_score": combined_similarity * 100,  # Convert to percentage
+            "similarity_score": combined_similarity * 100,  
             "status": MatchedItem.MatchingResult.FAILED
         }
         serializer = MatchedItemSerializer(data=matched_item_data)
