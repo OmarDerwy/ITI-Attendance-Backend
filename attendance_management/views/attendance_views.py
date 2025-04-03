@@ -308,7 +308,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             "message": f"Successfully reset check-in status for {count} students."
         })
 
-    @action(detail=False, methods=['POST'], url_path='reset-student', permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['POST'], url_path='reset-student', permission_classes=[IsSupervisorOrAboveUser])
     def reset_student(self, request):
         """
         Reset a specific student's check-in status.
