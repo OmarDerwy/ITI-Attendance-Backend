@@ -187,8 +187,8 @@ class StudentViewSet(viewsets.ModelViewSet):
         allUsers = models.CustomUser.objects.all()
         students = allUsers.filter(groups__name='student') # TODO not all students actually possess the student group, need to fix database later
         if 'supervisor' in requestUserGroups.values_list('name', flat=True):
-            hisTrack = requestUser.tracks.get()
-            students = students.filter(student_profile__track=hisTrack)
+            hisTrack = requestUser.tracks.all()
+            students = students.filter(student_profile__track__in=hisTrack)
             return students.order_by('id')
         return students.order_by('id')
 
