@@ -51,7 +51,7 @@ class Session(models.Model):
     ]
     schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE, related_name='sessions')
     title = models.CharField(max_length=255)
-    instructor = models.CharField(max_length=255)
+    instructor = models.CharField(max_length=255, null=True, blank=True)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     session_type = models.CharField(max_length=10, choices=COURSE_CHOICES, default='offline')
