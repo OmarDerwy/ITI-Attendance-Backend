@@ -33,6 +33,7 @@ class Schedule(models.Model):
     name = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     custom_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='Schedules')
+    is_shared = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if not self.custom_branch and self.track:
@@ -50,6 +51,7 @@ class Session(models.Model):
     ]
     schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE, related_name='sessions')
     title = models.CharField(max_length=255)
+    instructor = models.CharField(max_length=255)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     session_type = models.CharField(max_length=10, choices=COURSE_CHOICES, default='offline')

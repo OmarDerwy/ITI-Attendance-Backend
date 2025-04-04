@@ -4,14 +4,14 @@ from users.models import CustomUser
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
-        fields = ['id', 'title', 'start_time', 'end_time', 'session_type', 'schedule']
+        fields = ['id', 'title', 'instructor', 'start_time', 'end_time', 'session_type', 'schedule']
 
 class ScheduleSerializer(serializers.ModelSerializer):
     sessions = SessionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Schedule
-        fields = ['id', 'name', 'track', 'created_at', 'sessions', 'custom_branch']
+        fields = ['id', 'name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared']
 
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
