@@ -6,8 +6,16 @@ meta {
 
 post {
   url: http://localhost:8000/api/v1/accounts/users/
-  body: none
+  body: multipartForm
   auth: inherit
+}
+
+params:query {
+  : 
+}
+
+body:multipart-form {
+  : 
 }
 
 script:pre-request {
