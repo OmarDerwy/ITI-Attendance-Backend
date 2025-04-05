@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from users.models import CustomUser
+from django.db.models import UniqueConstraint
 
 class Branch(models.Model):
     name = models.CharField(max_length=255)
@@ -29,11 +30,14 @@ class Track(models.Model):
         return self.name
 
 class Schedule(models.Model):
-    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='Schedules') ####
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='Schedules')
     name = models.CharField(max_length=255)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateField(auto_now_add=True)  # Changed to DateField
     custom_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='Schedules')
     is_shared = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('track', 'created_at')  # Define composite primary key
 
     def save(self, *args, **kwargs):
         if not self.custom_branch and self.track:

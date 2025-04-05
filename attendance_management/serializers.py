@@ -11,7 +11,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Schedule
-        fields = ['id', 'name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared']
+        fields = ['name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared']
 
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
