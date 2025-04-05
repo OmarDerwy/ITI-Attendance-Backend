@@ -5,6 +5,14 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 logger = logging.getLogger(__name__)
 
 class NotificationConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for real-time notifications.
+    
+    Connect using:
+    ws://example.com/ws/notifications/?token=your-jwt-token
+    OR
+    Use an Authorization header with "Bearer your-jwt-token"
+    """
     async def connect(self):
         # Reject connection if the user is anonymous
         if self.scope["user"].is_anonymous:
