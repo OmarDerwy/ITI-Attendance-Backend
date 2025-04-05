@@ -32,7 +32,7 @@ urlpatterns = [
     # test endpoint
     path(f'{API_PREFIX}dummy/', views.hello_world, name='hello-world'),
     # apps
-    path(f'{API_PREFIX}lost-and-found/', include('lost_and_found_system.urls')),
+    # path(f'{API_PREFIX}lost-and-found/', include('lost_and_found_system.urls')),
     path(f'{API_PREFIX}accounts/', include('users.urls')),
     path(f'{API_PREFIX}attendance/', include('attendance_management.urls')),
 ]
