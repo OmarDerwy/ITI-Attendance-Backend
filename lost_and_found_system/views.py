@@ -127,17 +127,6 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(lost_item__user=self.request.user)
         return qs
 
-    @action(detail=False, methods=['GET'], url_path='my-matches', url_name='my-matches')
-    def my_matches(self, request):
-        user_matches = self.get_queryset()
-        page = self.paginate_queryset(user_matches)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(user_matches, many=True)
-        return Response(serializer.data)
-
     @action(detail=True, methods=['POST'], url_path='confirm-match', url_name='confirm-match')
     def confirm_match(self, request, pk=None):
         """
