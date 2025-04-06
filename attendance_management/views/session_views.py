@@ -68,9 +68,9 @@ class SessionViewSet(viewsets.ModelViewSet):
         Handle bulk creation or updating of sessions.
         """
         import logging
-        logger = logging.getLogger(__name__)  # Set up a logger for debugging
+        logger = logging.getLogger(__name__) 
 
-        combined_events = request.data.get('combinedEvents')  # Extract the combinedEvents key
+        combined_events = request.data.get('combinedEvents')  
         if not isinstance(combined_events, list):  # Validate that combinedEvents is a list
             logger.error("Invalid data format: combinedEvents is not a list.")
             return Response({'error': 'Invalid data format. Expected a list under "combinedEvents".'}, status=400)
@@ -173,36 +173,18 @@ class SessionViewSet(viewsets.ModelViewSet):
     def calendar_data(self, request):
         """
         Retrieve calendar data by joining schedules with sessions.
-        Allow filtering by time period (day, week, month) and/or track.
         """
-        period = request.query_params.get('period', None)
         track_id = request.query_params.get('track_id')
-        track_name = request.query_params.get('track_name')
-        today = now().date()
 
         # Ensure track filter is mandatory
-        if not track_id and not track_name:
-            return Response({'error': 'Track filter is required (track_id or track_name).'}, status=400)
+        if not track_id:
+            return Response({'error': 'Track filter is required.'}, status=400)
 
-        # Filter sessions by period
-        if period == 'day':
-            sessions = self.queryset.filter(start_time__date=today)
-        elif period == 'week':
-            start_of_week = today - timedelta(days=today.weekday())
-            end_of_week = start_of_week + timedelta(days=6)
-            sessions = self.queryset.filter(start_time__date__range=[start_of_week, end_of_week])
-        elif period == 'month':
-            sessions = self.queryset.filter(start_time__month=today.month)
-        elif period is None:
-            sessions = self.queryset  # No period filter applied
-        else:
-            return Response({'error': 'Invalid period'}, status=400)
+        sessions = self.queryset  # No period filter applied
 
         # Filter sessions by track
         if track_id:
             sessions = sessions.filter(schedule__track_id=track_id)
-        elif track_name:
-            sessions = sessions.filter(schedule__track__name__icontains=track_name)
 
         # Ensure the query returns all matching records
         if not sessions.exists():
@@ -210,16 +192,17 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         # Retrieve the required fields from sessions and their related schedules
         calendar_data = sessions.values(
-            'id',  # Session ID
-            'title',  # Session title
-            'instructor',  # Session instructor
-            'schedule__track_id',  # Track ID
-            'session_type',  # Session type (online/offline)
-            'start_time',  # Session start time
-            'end_time',  # Session end time
-            'schedule_id',  # Schedule ID
-            'schedule__custom_branch_id',  # Branch ID from the related schedule
-            'schedule__created_at'  # Schedule date
+            'id', 
+            'title',  
+            'instructor', 
+            'schedule__track_id', 
+            'session_type',  
+            'start_time', 
+            'end_time',  
+            'schedule_id',  
+            'schedule__custom_branch_id', 
+            'schedule__custom_branch__name',
+            'schedule__created_at'
         )
 
         # Transform the data into the desired format
@@ -232,11 +215,14 @@ class SessionViewSet(viewsets.ModelViewSet):
                 "is_online": session['session_type'] == "online",
                 "start": session['start_time'],
                 "end": session['end_time'],
-                "branch_id": session['schedule__custom_branch_id'],
+                "branch": {
+                    "id": session['schedule__custom_branch_id'],
+                    "name": session['schedule__custom_branch__name']
+                },
                 "schedule_id": session['schedule_id'],
                 "schedule_date": session['schedule__created_at']
             }
             for session in calendar_data
         ]
 
-        return Response(result)
+        return Response(result, status=200)
