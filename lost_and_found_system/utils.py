@@ -3,11 +3,13 @@ import numpy as np
 from PIL import Image
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
-from .models import MatchedItem, LostItem, FoundItem
+from .models import MatchedItem, LostItem, FoundItem, Notification
 from .serializers import MatchedItemSerializer
 import logging
 import requests
 from io import BytesIO
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 logger = logging.getLogger(__name__)
 
