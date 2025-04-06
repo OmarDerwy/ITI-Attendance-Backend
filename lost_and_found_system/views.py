@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import logging
-from .utils import match_lost_and_found_items
+from .utils import match_lost_and_found_items, send_and_save_notification
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 logger = logging.getLogger(__name__)
@@ -170,30 +170,16 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Notify the user who submitted the FoundItem
         found_item_user = match.found_item.user
-        lost_item_owner_name = match.lost_item.user.email
         notification_message = (
             f"Congratulations! We found the owner of the item you submitted: '{match.found_item.name}'. "
             f"The owner's name is {match.lost_item.user}."
         )
 
-        # Create a notification in the database
-        Notification.objects.create(
+        # Use the utility function instead of separate operations
+        send_and_save_notification(
             user=found_item_user,
+            title="Owner Found!",
             message=notification_message
-        )
-
-        # Send a real-time WebSocket notification
-        channel_layer = get_channel_layer()
-        group_name = f"user_{found_item_user.id}"
-        async_to_sync(channel_layer.group_send)(
-            group_name,
-            {
-                "type": "send_notification",
-                "message": {
-                    "title": "Owner Found!",
-                    "body": notification_message
-                }
-            }
         )
 
         return Response({
