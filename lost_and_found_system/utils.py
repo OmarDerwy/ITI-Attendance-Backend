@@ -106,3 +106,36 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
 
     logger.info("No match found. Combined similarity score did not exceed the threshold.")
     return None
+
+def send_and_save_notification(user, title, message):
+    """
+    Utility function to send a WebSocket notification and save it to the database.
+    
+    Args:
+        user: The user to send the notification to
+        title: The notification title
+        message: The notification message body
+    """
+    # Create database record
+    Notification.objects.create(
+        user=user,
+        message=message,
+        is_read=False
+    )
+    
+    # Send real-time WebSocket notification
+    channel_layer = get_channel_layer()
+    group_name = f"user_{user.id}" if user.is_authenticated else "anonymous"
+    
+    notification_data = {
+        "type": "send_notification",
+        "message": {
+            "title": title,
+            "body": message
+        }
+    }
+    
+    logger.info(f"Sending notification to {user.email}: {title} - {message}")
+    async_to_sync(channel_layer.group_send)(group_name, notification_data)
+    
+    return True

@@ -31,10 +31,12 @@ class MatchedItemSerializer(serializers.ModelSerializer):
     found_item = serializers.PrimaryKeyRelatedField(queryset=FoundItem.objects.all(), write_only=True)
     status = serializers.ChoiceField(choices=MatchedItem.MatchingResult.choices)
     similarity_score = serializers.FloatField()
+    lost_item_user = serializers.PrimaryKeyRelatedField(source='lost_item.user', read_only=True)
+    found_item_user = serializers.PrimaryKeyRelatedField(source='found_item.user', read_only=True)
 
     class Meta:
         model = MatchedItem
-        fields = ['match_id', 'lost_item', 'found_item', 'lost_item_details', 'found_item_details', 'similarity_score', 'created_at', 'status']
+        fields = ['match_id', 'lost_item', 'found_item', 'lost_item_details', 'found_item_details', 'similarity_score', 'created_at', 'status', 'lost_item_user', 'found_item_user']
         read_only_fields = ['match_id', 'created_at']
 
 

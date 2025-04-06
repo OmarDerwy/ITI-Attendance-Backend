@@ -87,13 +87,22 @@ class MatchedItem(models.Model):
         
         # Only send notification if this is a new instance and similarity score exceeds threshold
         if is_new and self.similarity_score > 60:
+            # Create database notification record
+            notification_message = f"Your lost item '{self.lost_item.name}' has been matched with a found item '{self.found_item.name}' with a similarity score of {self.similarity_score:.2f}%."
+            Notification.objects.create(
+                user=self.lost_item.user,
+                message=notification_message,
+                is_read=False
+            )
+            
+            # Send real-time WebSocket notification
             channel_layer = get_channel_layer()
             group_name = f"user_{self.lost_item.user.id}" if self.lost_item.user.is_authenticated else "anonymous"
             message = {
                 "type": "send_notification",
                 "message": {
                     "title": "Item Matched!",
-                    "body": f"Your lost item '{self.lost_item.name}' has been matched with a found item '{self.found_item.name}' with a similarity score of {self.similarity_score:.2f}%."
+                    "body": notification_message
                 }
             }
             logger.info(f"Sending notification to group: {group_name} with message: {message}")
