@@ -51,23 +51,37 @@ class LostItemViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        logger.info("perform_create method called.")  # Add this line
-        # Save the found item
+        logger.info("perform_create method called.")
+        # Save the lost item
         lost_item = serializer.save(user=self.request.user)
         logger.info(f"LostItem created: {lost_item}")
 
-        # Match the found item with all lost items
+        # Match the lost item with all found items
         found_items = FoundItem.objects.filter(status=ItemStatusChoices.FOUND)
-        logger.info(f"Matching FoundItem with {found_items.count()} LostItems")
+        logger.info(f"Matching LostItem with {found_items.count()} FoundItems")
+        
         for found_item in found_items:
             match_result = match_lost_and_found_items(lost_item, found_item)
+            
             if match_result:
                 logger.info(f"Match created: {match_result}")
+                
+                # Update status after match is created - use refresh_from_db to ensure we have latest data
+                lost_item.refresh_from_db()
+                found_item.refresh_from_db()
+                
+                # Update both items to MATCHED status
+                lost_item.status = ItemStatusChoices.MATCHED
+                found_item.status = ItemStatusChoices.MATCHED
+                
+                # Force save with update_fields to ensure only status is updated
+                lost_item.save(update_fields=['status'])
+                found_item.save(update_fields=['status'])
+                
+                logger.info(f"Updated status of Lost item '{lost_item.name}' to {lost_item.status}")
+                logger.info(f"Updated status of Found item '{found_item.name}' to {found_item.status}")
             else:
-                logger.info(f"No match found for LostItem: {lost_item.name} and FoundItem: {found_item.name}")
-
-
-
+                logger.info(f"No match found between LostItem '{lost_item.name}' and FoundItem '{found_item.name}'")
 
 class FoundItemViewSet(viewsets.ModelViewSet):
     """
@@ -85,20 +99,37 @@ class FoundItemViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        logger.info("perform_create method called.")  # Add this line
+        logger.info("perform_create method called.")
         # Save the found item
         found_item = serializer.save(user=self.request.user)
         logger.info(f"FoundItem created: {found_item}")
-
+        
         # Match the found item with all lost items
         lost_items = LostItem.objects.filter(status=ItemStatusChoices.LOST)
         logger.info(f"Matching FoundItem with {lost_items.count()} LostItems")
+        
         for lost_item in lost_items:
             match_result = match_lost_and_found_items(lost_item, found_item)
+            
             if match_result:
                 logger.info(f"Match created: {match_result}")
+                
+                # Update status after match is created - use refresh_from_db to ensure we have latest data
+                lost_item.refresh_from_db()
+                found_item.refresh_from_db()
+                
+                # Update both items to MATCHED status
+                lost_item.status = ItemStatusChoices.MATCHED
+                found_item.status = ItemStatusChoices.MATCHED
+                
+                # Force save with update_fields to ensure only status is updated
+                lost_item.save(update_fields=['status'])
+                found_item.save(update_fields=['status'])
+                
+                logger.info(f"Updated status of Lost item '{lost_item.name}' to {lost_item.status}")
+                logger.info(f"Updated status of Found item '{found_item.name}' to {found_item.status}")
             else:
-                logger.info(f"No match found for LostItem: {lost_item.name} and FoundItem: {found_item.name}")
+                logger.info(f"No match found between LostItem '{lost_item.name}' and FoundItem '{found_item.name}'")
 
     @action(detail=False, methods=['GET'])
     def my_found_items(self, request):
@@ -167,6 +198,19 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
         # Update the status to SUCCEEDED
         match.status = MatchedItem.MatchingResult.SUCCEEDED
         match.save()
+        
+        # Update both lost and found items to CONFIRMED status
+        lost_item = match.lost_item
+        found_item = match.found_item
+        
+        lost_item.status = ItemStatusChoices.CONFIRMED
+        found_item.status = ItemStatusChoices.CONFIRMED
+        
+        lost_item.save(update_fields=['status'])
+        found_item.save(update_fields=['status'])
+        
+        logger.info(f"Updated lost item {lost_item.name} status to CONFIRMED")
+        logger.info(f"Updated found item {found_item.name} status to CONFIRMED")
 
         # Notify the user who submitted the FoundItem
         found_item_user = match.found_item.user
@@ -183,8 +227,10 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         return Response({
-            "message": "Match status updated to SUCCEEDED.",
-            "notification": notification_message
+            "message": "Match status updated to SUCCEEDED and item statuses updated to CONFIRMED.",
+            "notification": notification_message,
+            "lost_item_status": lost_item.status,
+            "found_item_status": found_item.status
         })
     
 class NotificationViewSet(viewsets.ModelViewSet):
@@ -193,10 +239,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes=[IsAuthenticated]
     
     def get_queryset(self):
-        qs = super().get_queryset()
-        if not self.request.user.is_staff:
-            qs = qs.filter(user=self.request.user)  # Users only see their own items
-        return qs
+
+        return super().get_queryset().filter(user=self.request.user)
     
     @action(detail=False, methods=["GET"])
     def unread(self, request):
