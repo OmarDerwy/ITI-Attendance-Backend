@@ -10,6 +10,8 @@ import requests
 from io import BytesIO
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from .models import ItemStatusChoices
+
 
 logger = logging.getLogger(__name__)
 
