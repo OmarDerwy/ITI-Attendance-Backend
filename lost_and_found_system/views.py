@@ -193,10 +193,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes=[IsAuthenticated]
     
     def get_queryset(self):
-        qs = super().get_queryset()
-        if not self.request.user.is_staff:
-            qs = qs.filter(user=self.request.user)  # Users only see their own items
-        return qs
+        return super().get_queryset().filter(user=self.request.user)
+
     
     @action(detail=False, methods=["GET"])
     def unread(self, request):
