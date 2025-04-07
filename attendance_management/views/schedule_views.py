@@ -6,7 +6,6 @@ from rest_framework.pagination import PageNumberPagination
 from ..models import Schedule, Track
 from ..serializers import ScheduleSerializer
 from core import permissions
-
 # Add custom pagination class
 class CustomPagination(PageNumberPagination):
     def get_paginated_response(self, data):
@@ -40,4 +39,3 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(track_id=track_id)
 
         return queryset
-

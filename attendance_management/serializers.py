@@ -11,6 +11,7 @@ class MiniTrackSerializer(serializers.ModelSerializer):
     class Meta:
         model = Track
         fields = ['id', 'name']
+
 class ScheduleSerializer(serializers.ModelSerializer):
     track = MiniTrackSerializer(read_only=True)  # Read-only field for track
     sessions = serializers.StringRelatedField(many=True, read_only=True)  # Read-only field for sessions
@@ -19,7 +20,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Schedule
-        fields = ['name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time']
+        fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time']
 
     def get_start_time(self, obj):
         """Get the start time from the first session of the day"""
@@ -30,6 +31,13 @@ class ScheduleSerializer(serializers.ModelSerializer):
         """Get the end time from the last session of the day"""
         last_session = Session.objects.filter(schedule=obj).order_by('-end_time').first()
         return last_session.end_time if last_session else None
+
+    def get_fields(self):
+        fields = super().get_fields()
+        view = self.context.get('view')
+        if view and view.action == 'retrieve':
+            fields['attendance_records'] = AttendanceRecordSerializer(many=True, read_only=True)
+        return fields
 
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
