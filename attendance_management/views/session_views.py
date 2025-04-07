@@ -81,15 +81,30 @@ class SessionViewSet(viewsets.ModelViewSet):
         def get_or_create_schedule(track_id, schedule_date, custom_branch_id):
             """
             Helper function to get or create a schedule.
+            Find a schedule for the given track and date, or create one if it doesn't exist.
             """
-            return Schedule.objects.get_or_create(
-                track_id=track_id,
-                created_at=schedule_date,
-                defaults={
-                    'name': f"Schedule for {schedule_date}",
-                    'custom_branch_id': custom_branch_id
-                }
-            )
+            try:
+                # Try to find a schedule for this track and date
+                schedule = Schedule.objects.filter(
+                    track_id=track_id,
+                    created_at=schedule_date
+                ).first()
+                
+                if schedule:
+                    # If found, return the existing schedule
+                    return schedule, False
+                else:
+                    # If not found, create a new schedule
+                    schedule = Schedule.objects.create(
+                        track_id=track_id,
+                        created_at=schedule_date,
+                        name=f"Schedule for {schedule_date}",
+                        custom_branch_id=custom_branch_id
+                    )
+                    return schedule, True
+            except Exception as e:
+                logger.error(f"Error getting or creating schedule: {str(e)}")
+                raise e
 
         for session_data in combined_events:  # Iterate over each session in the list
             if not isinstance(session_data, dict):  # Validate that session_data is a dictionary
@@ -108,20 +123,14 @@ class SessionViewSet(viewsets.ModelViewSet):
                 custom_branch_id = session_data.get('branch', {}).get('id')
                 schedule_date = parse_datetime(session_data.get('schedule_date')).date() if session_data.get('schedule_date') else start_time.date()
 
-                # Validate required fields
-                if not all([title, track_id, start_time, end_time, custom_branch_id]):
-                    logger.error(f"Missing required fields for session: {session_data}")
-                    return Response({'error': f'Missing required fields for session: {session_data}'}, status=400)
-
                 # Get or create the schedule
                 schedule, _ = get_or_create_schedule(track_id, schedule_date, custom_branch_id)
 
                 if session_id:  # If the session ID is provided, update the session
                     try:
                         session = Session.objects.get(id=session_id)  # Get the session by ID
-                        if session.schedule.created_at != schedule_date:  # Check if the schedule date matches
-                            session.delete()  # Delete the session if the dates don't match
-                            session = None  # Mark session as None to create a new one
+                        # Instead of deleting the session when schedule date changes, 
+                        # just update the session with the new schedule
                     except Session.DoesNotExist:  # Handle case where the session does not exist
                         session = None
 
@@ -131,7 +140,9 @@ class SessionViewSet(viewsets.ModelViewSet):
                         session.start_time = start_time
                         session.end_time = end_time
                         session.session_type = session_type
-                        session.schedule = schedule  # Assign the correct Schedule instance
+                        # Always assign the proper schedule based on the new date
+                        # This handles moving sessions between days
+                        session.schedule = schedule 
                         session.save()  # Save the updated session
                         updated_sessions.append(session)  # Add the session to the updated list
                     else:  # Create a new session
@@ -162,7 +173,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 return Response({'error': f"Error processing session data: {session_data}, Error: {str(e)}"}, status=400)
 
         # Return a response with the created and updated session IDs
-        return Response({
+        return Response(status=200, data={
             'message': 'Bulk operation completed successfully.',
             'created_sessions': [session.id for session in created_sessions],
             'updated_sessions': [session.id for session in updated_sessions]
