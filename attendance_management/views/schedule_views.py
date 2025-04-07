@@ -2,47 +2,40 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils.timezone import now
-
-from ..models import Schedule
+from rest_framework.pagination import PageNumberPagination
+from ..models import Schedule, Track
 from ..serializers import ScheduleSerializer
 from core import permissions
+# Add custom pagination class
+class CustomPagination(PageNumberPagination):
+    def get_paginated_response(self, data):
+        response = super().get_paginated_response(data)
+        for key in ['next', 'previous']:
+            link = response.data.get(key)
+            if link:
+                response.data[key] = link.replace("http://localhost:8000/api/v1/", "")
+        return response
 
 class ScheduleViewSet(viewsets.ModelViewSet):
-    queryset = Schedule.objects.all()
     serializer_class = ScheduleSerializer
-    permission_classes = [permissions.IsStudentOrAboveUser] # CHECK if too much permission to student
+    permission_classes = [permissions.IsStudentOrAboveUser]
+    pagination_class = CustomPagination  # added custom pagination
 
-    # @action(detail=False, methods=['get'], url_path='search')
-    # def search(self, request):
-    #     """
-    #     Allow users to search schedules based on a time period (day, week, month)
-    #     and/or filter schedules by track.
-    #     """
-    #     period = request.query_params.get('period', None)
-    #     track_id = request.query_params.get('track_id')
-    #     track_name = request.query_params.get('track_name')
-    #     today = now().date()
+    def get_queryset(self):
+        user = self.request.user
+        groups = user.groups.values_list('name', flat=True)
+        if 'supervisor' in groups:
+            tracks = Track.objects.filter(supervisor=user)
+            queryset = Schedule.objects.filter(track__in=tracks)
+        elif 'admin' in groups:
+            queryset = Schedule.objects.all()
+        elif 'student' in groups:
+            queryset = Schedule.objects.filter(track__students__user=user)
+        else:
+            queryset = Schedule.objects.none()
 
-    #     # Filter by period
-    #     if period == 'day':
-    #         schedules = self.queryset.filter(sessions__start_time__date=today)
-    #     elif period == 'week':
-    #         start_of_week = today - timedelta(days=today.weekday())
-    #         end_of_week = start_of_week + timedelta(days=6)
-    #         schedules = self.queryset.filter(sessions__start_time__date__range=[start_of_week, end_of_week])
-    #     elif period == 'month':
-    #         schedules = self.queryset.filter(sessions__start_time__month=today.month)
-    #     elif period is None:
-    #         schedules = self.queryset  # No period filter applied
-    #     else:
-    #         return Response({'error': 'Invalid period'}, status=400)
+        track_id = self.request.query_params.get('track')
+        if track_id:
+            queryset = queryset.filter(track_id=track_id)
 
-    #     # Filter by track
-    #     if track_id:
-    #         schedules = schedules.filter(track__id=track_id)
-    #     elif track_name:
-    #         schedules = schedules.filter(track__name__icontains=track_name)
-
-    #     serializer = self.get_serializer(schedules, many=True)
-    #     return Response(serializer.data)
-# 
+        return queryset

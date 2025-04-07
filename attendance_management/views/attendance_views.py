@@ -359,6 +359,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": "No student record found for the logged-in user."
             }, status=status.HTTP_404_NOT_FOUND)
+    # add a new endpoint to get multiple attendance records by schedule
 
     from django.utils import timezone
 
