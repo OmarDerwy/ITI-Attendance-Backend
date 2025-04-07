@@ -61,7 +61,7 @@ class Session(models.Model):
     session_type = models.CharField(max_length=10, choices=COURSE_CHOICES, default='offline')
 
     def __str__(self):
-        return f"{self.title} ({self.start_time} - {self.end_time})"
+        return f"{self.title}"
 
 class Student(models.Model):  # Renamed from StudentInfo
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='student_profile')

@@ -357,7 +357,11 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": "No student record found for the logged-in user."
             }, status=status.HTTP_404_NOT_FOUND)
+    # add a new endpoint to get multiple attendance records by schedule
 
+
+
+    # helper functions
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
         Calculate the distance between two coordinates using the Haversine formula.

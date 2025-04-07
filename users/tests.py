@@ -4,6 +4,8 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from rest_framework import status
 
+from attendance_management.models import Schedule, Track
+
 User = get_user_model()
 
 class test_get_students_using_supervisor(TestCase):
@@ -15,9 +17,8 @@ class test_get_students_using_supervisor(TestCase):
     #     self.client.force_authenticate(user=User.objects.get(pk=16))
     #     self.url = reverse('user-list')
 
-    user = User.objects.get(pk=16)
-    track = user.tracks.first()
-    
-    print(track)
+    user = User.objects.get(email='stu@stu.com')
+    test = Track.objects.select_related('default_branch', 'supervisor')
+    print(user)
     
 

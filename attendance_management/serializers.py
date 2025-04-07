@@ -1,22 +1,41 @@
 from rest_framework import serializers
 from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest
 from users.models import CustomUser
+
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
         fields = ['id', 'title', 'instructor', 'start_time', 'end_time', 'session_type', 'schedule']
 
+class MiniTrackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Track
+        fields = ['id', 'name']
 class ScheduleSerializer(serializers.ModelSerializer):
-    sessions = SessionSerializer(many=True, read_only=True)
-
+    track = MiniTrackSerializer(read_only=True)  # Read-only field for track
+    sessions = serializers.StringRelatedField(many=True, read_only=True)  # Read-only field for sessions
+    start_time = serializers.SerializerMethodField()
+    end_time = serializers.SerializerMethodField()
+    
     class Meta:
         model = Schedule
-        fields = ['name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared']
+        fields = ['name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time']
+
+    def get_start_time(self, obj):
+        """Get the start time from the first session of the day"""
+        first_session = Session.objects.filter(schedule=obj).order_by('start_time').first()
+        return first_session.start_time if first_session else None
+        
+    def get_end_time(self, obj):
+        """Get the end time from the last session of the day"""
+        last_session = Session.objects.filter(schedule=obj).order_by('-end_time').first()
+        return last_session.end_time if last_session else None
 
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
         model = Student
         fields = ['id', 'user', 'track']
+
 class TrackSerializer(serializers.ModelSerializer):
     branch_id = serializers.IntegerField(write_only=True)  # For POST/PUT requests
     supervisor_id = serializers.IntegerField(write_only=True)  # For POST/PUT requests
@@ -111,6 +130,5 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 class PermissionRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = PermissionRequest
-        
         fields = ['id', 'student', 'schedule', 'request_type', 'reason', 'status', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
