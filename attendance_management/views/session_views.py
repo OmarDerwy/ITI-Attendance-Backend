@@ -7,7 +7,7 @@ from django.utils.dateparse import parse_datetime  # For parsing datetime string
 from ..models import Session, Schedule  # Importing models used in this view
 from ..serializers import SessionSerializer  # Serializer for the Session model
 from core import permissions  # Custom permissions module
-
+from datetime import timedelta
 class SessionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing sessions.
@@ -61,34 +61,16 @@ class SessionViewSet(viewsets.ModelViewSet):
         attendance_record.save()  # Save the updated record
         return Response({'message': 'Early leave requested successfully', 'status': 'pending'})  # Return success message
 
-
-
-    # expected request data format:
-    # [
-    #     {
-    #         "id": 1,
-    #         "title": "Session 1",
-    #         "instructor": "Instructor 1",
-    #         "trackId": 1,
-    #         "isOnline": true,
-    #         "start": "2023-10-01T10:00:00Z",
-    #         "end": "2023-10-01T12:00:00Z",
-    #         "branch.id": 1,
-    #         "schedule_date": "2023-10-01"
-    #     },
-    #     {
-    #         "id": 2,
-    #         "title": "Session 2",
     @action(detail=False, methods=['post'], url_path='bulk-create-or-update')
-    @transaction.atomic  # Ensure all operations in this method are atomic
+    @transaction.atomic  # Ensure all operations in this method are atomic which means they will either all succeed or none will be applied
     def bulk_create_or_update(self, request):
         """
         Handle bulk creation or updating of sessions.
         """
         import logging
-        logger = logging.getLogger(__name__)  # Set up a logger for debugging
+        logger = logging.getLogger(__name__) 
 
-        combined_events = request.data.get('combinedEvents')  # Extract the combinedEvents key
+        combined_events = request.data.get('combinedEvents')  
         if not isinstance(combined_events, list):  # Validate that combinedEvents is a list
             logger.error("Invalid data format: combinedEvents is not a list.")
             return Response({'error': 'Invalid data format. Expected a list under "combinedEvents".'}, status=400)
@@ -96,86 +78,85 @@ class SessionViewSet(viewsets.ModelViewSet):
         created_sessions = []  # List to store newly created sessions
         updated_sessions = []  # List to store updated sessions
 
+        def get_or_create_schedule(track_id, schedule_date, custom_branch_id):
+            """
+            Helper function to get or create a schedule.
+            Find a schedule for the given track and date, or create one if it doesn't exist.
+            """
+            try:
+                # Try to find a schedule for this track and date
+                schedule = Schedule.objects.filter(
+                    track_id=track_id,
+                    created_at=schedule_date
+                ).first()
+                
+                if schedule:
+                    # If found, return the existing schedule
+                    return schedule, False
+                else:
+                    # If not found, create a new schedule
+                    schedule = Schedule.objects.create(
+                        track_id=track_id,
+                        created_at=schedule_date,
+                        name=f"Schedule for {schedule_date}",
+                        custom_branch_id=custom_branch_id
+                    )
+                    return schedule, True
+            except Exception as e:
+                logger.error(f"Error getting or creating schedule: {str(e)}")
+                raise e
+
         for session_data in combined_events:  # Iterate over each session in the list
             if not isinstance(session_data, dict):  # Validate that session_data is a dictionary
                 logger.error(f"Invalid session data format: {session_data}")
                 return Response({'error': f'Invalid session data format: {session_data}'}, status=400)
 
             try:
-                session_id = session_data.get('id')  
-                title = session_data.get('title')  
-                instructor = session_data.get('instructor') 
-                track_id = session_data.get('trackId')  
-                session_type = "online" if session_data.get('isOnline') else "offline" 
-                start_time = parse_datetime(session_data.get('start')) 
-                end_time = parse_datetime(session_data.get('end')) 
-                custom_branch_id = session_data.get('branch', {}).get('id')  # Extract branch ID from nested dictionary
-                schedule_date = parse_datetime(session_data.get('schedule_date')).date() if session_data.get('schedule_date') else start_time.date()  # Use provided schedule_date or fallback to start_time.date()
+                # Extract session data
+                session_id = session_data.get('id')
+                title = session_data.get('title')
+                instructor = session_data.get('instructor')
+                track_id = session_data.get('trackId')
+                session_type = "online" if session_data.get('isOnline') else "offline"
+                start_time = parse_datetime(session_data.get('start'))
+                end_time = parse_datetime(session_data.get('end'))
+                custom_branch_id = session_data.get('branch', {}).get('id')
+                schedule_date = parse_datetime(session_data.get('schedule_date')).date() if session_data.get('schedule_date') else start_time.date()
 
-                # Validate required fields
-                if not all([title, track_id, start_time, end_time, custom_branch_id]):
-                    logger.error(f"Missing required fields for session: {session_data}")
-                    return Response({'error': f'Missing required fields for session: {session_data}'}, status=400)
+                # Get or create the schedule
+                schedule, _ = get_or_create_schedule(track_id, schedule_date, custom_branch_id)
 
                 if session_id:  # If the session ID is provided, update the session
                     try:
                         session = Session.objects.get(id=session_id)  # Get the session by ID
-                        if session.schedule.created_at != schedule_date:  # Check if the schedule date matches
-                            session.delete()  # Delete the session if the dates don't match
-
-                            # Check if a schedule exists for the new date
-                            schedule = Schedule.objects.filter(track_id=track_id, created_at=schedule_date).first()
-                            if not schedule:  # If no schedule exists, create a new one
-                                schedule = Schedule.objects.create(
-                                    track_id=track_id,
-                                    name=f"Schedule for {schedule_date}",
-                                    custom_branch_id=custom_branch_id,
-                                    created_at=schedule_date
-                                )
-
-                            # Create a new session
-                            new_session = Session.objects.create(
-                                title=title,
-                                instructor=instructor,
-                                track_id=track_id,
-                                schedule=schedule,
-                                start_time=start_time,
-                                end_time=end_time,
-                                session_type=session_type
-                            )
-                            created_sessions.append(new_session)  # Add the new session to the created list
-                        else:
-                            # Update the session if the dates match
-                            schedule = Schedule.objects.filter(track_id=track_id, created_at=schedule_date).first()
-                            if not schedule:  # Ensure the schedule exists
-                                schedule = Schedule.objects.create(
-                                    track_id=track_id,
-                                    name=f"Schedule for {schedule_date}",
-                                    custom_branch_id=custom_branch_id,
-                                    created_at=schedule_date
-                                )
-
-                            session.title = title
-                            session.instructor = instructor
-                            session.start_time = start_time
-                            session.end_time = end_time
-                            session.session_type = session_type
-                            session.schedule = schedule  # Assign the correct Schedule instance
-                            session.save()  # Save the updated session
-                            updated_sessions.append(session)  # Add the session to the updated list
+                        # Instead of deleting the session when schedule date changes, 
+                        # just update the session with the new schedule
                     except Session.DoesNotExist:  # Handle case where the session does not exist
-                        return Response({'error': f'Session with ID {session_id} does not exist.'}, status=404)
-                else:  # If no session ID is provided, create a new session
-                    schedule = Schedule.objects.filter(track_id=track_id, created_at=schedule_date).first()
-                    if not schedule:  # If no schedule exists, create a new one
-                        schedule = Schedule.objects.create(
-                            track_id=track_id,
-                            name=f"Schedule for {schedule_date}",
-                            custom_branch_id=custom_branch_id,
-                            created_at=schedule_date
-                        )
+                        session = None
 
-                    # Create a new session
+                    if session:  # Update the session if it exists
+                        session.title = title
+                        session.instructor = instructor
+                        session.start_time = start_time
+                        session.end_time = end_time
+                        session.session_type = session_type
+                        # Always assign the proper schedule based on the new date
+                        # This handles moving sessions between days
+                        session.schedule = schedule 
+                        session.save()  # Save the updated session
+                        updated_sessions.append(session)  # Add the session to the updated list
+                    else:  # Create a new session
+                        new_session = Session.objects.create(
+                            title=title,
+                            instructor=instructor,
+                            track_id=track_id,
+                            schedule=schedule,
+                            start_time=start_time,
+                            end_time=end_time,
+                            session_type=session_type
+                        )
+                        created_sessions.append(new_session)  # Add the new session to the created list
+                else:  # If no session ID is provided, create a new session
                     new_session = Session.objects.create(
                         title=title,
                         instructor=instructor,
@@ -192,8 +173,67 @@ class SessionViewSet(viewsets.ModelViewSet):
                 return Response({'error': f"Error processing session data: {session_data}, Error: {str(e)}"}, status=400)
 
         # Return a response with the created and updated session IDs
-        return Response({
+        return Response(status=200, data={
             'message': 'Bulk operation completed successfully.',
             'created_sessions': [session.id for session in created_sessions],
             'updated_sessions': [session.id for session in updated_sessions]
         })
+
+        
+    @action(detail=False, methods=['get'], url_path='calendar-data')
+    def calendar_data(self, request):
+        """
+        Retrieve calendar data by joining schedules with sessions.
+        """
+        track_id = request.query_params.get('track_id')
+
+        # Ensure track filter is mandatory
+        if not track_id:
+            return Response({'error': 'Track filter is required.'}, status=400)
+
+        sessions = self.queryset  # No period filter applied
+
+        # Filter sessions by track
+        if track_id:
+            sessions = sessions.filter(schedule__track_id=track_id)
+
+        # Ensure the query returns all matching records
+        if not sessions.exists():
+            return Response({'error': 'No sessions found for the given filters.'}, status=404)
+
+        # Retrieve the required fields from sessions and their related schedules
+        calendar_data = sessions.values(
+            'id', 
+            'title',  
+            'instructor', 
+            'schedule__track_id', 
+            'session_type',  
+            'start_time', 
+            'end_time',  
+            'schedule_id',  
+            'schedule__custom_branch_id', 
+            'schedule__custom_branch__name',
+            'schedule__created_at'
+        )
+
+        # Transform the data into the desired format
+        result = [
+            {
+                "id": session['id'],
+                "title": session['title'],
+                "instructor": session['instructor'],
+                "track_id": session['schedule__track_id'],
+                "is_online": session['session_type'] == "online",
+                "start": session['start_time'],
+                "end": session['end_time'],
+                "branch": {
+                    "id": session['schedule__custom_branch_id'],
+                    "name": session['schedule__custom_branch__name']
+                },
+                "schedule_id": session['schedule_id'],
+                "schedule_date": session['schedule__created_at']
+            }
+            for session in calendar_data
+        ]
+
+        return Response(result, status=200)

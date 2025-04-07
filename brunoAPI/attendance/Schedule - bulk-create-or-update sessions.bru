@@ -1,5 +1,5 @@
 meta {
-  name: bulk-create-or-update sessions
+  name: Schedule - bulk-create-or-update sessions
   type: http
   seq: 8
 }
@@ -19,8 +19,9 @@ body:json {
             "session_type": "offline",
            "start_time": "2023-10-01T10:00:00Z",
             "end_time": "2023-10-01T12:00:00Z",
-            "custom_branch": 1,
-           "schedule_date": "2023-10-01"
+            "branch":   {"id":1 , "name":""},
+           "schedule_date": "2023-10-01",
+        "isOnline": false
               } 
   
       ]

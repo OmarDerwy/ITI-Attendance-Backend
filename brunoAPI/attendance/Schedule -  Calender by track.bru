@@ -1,0 +1,30 @@
+meta {
+  name: Schedule -  Calender by track
+  type: http
+  seq: 9
+}
+
+get {
+  url: http://localhost:8000/api/v1/attendance//sessions/calendar-data/?track_id=1
+  body: none
+  auth: inherit
+}
+
+params:query {
+  track_id: 1
+}
+
+body:json {
+  [
+    {
+      "title": "Session 1",
+      "instructor": "Instructor 1",
+      "track": 1,
+      "session_type": "offline",
+      "start_time": "2023-10-01T10:00:00Z",
+      "end_time": "2023-10-01T12:00:00Z",
+      "custom_branch": 1,
+      "schedule_date": "2023-10-01"
+    }
+  ]
+}
