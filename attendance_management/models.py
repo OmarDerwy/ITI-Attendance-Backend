@@ -32,7 +32,7 @@ class Track(models.Model):
 class Schedule(models.Model):
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='Schedules')
     name = models.CharField(max_length=255)
-    created_at = models.DateField(auto_now_add=True)  # Changed to DateField
+    created_at = models.DateField() 
     custom_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='Schedules')
     is_shared = models.BooleanField(default=False)
 
