@@ -239,8 +239,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes=[IsAuthenticated]
     
     def get_queryset(self):
-
         return super().get_queryset().filter(user=self.request.user)
+
     
     @action(detail=False, methods=["GET"])
     def unread(self, request):
