@@ -9,6 +9,8 @@ from django.shortcuts import get_object_or_404
 from users.models import CustomUser
 from django.utils import timezone
 from core.permissions import IsSupervisorOrAboveUser  # Changed from relative to absolute import
+from ..models import Track
+from ..serializers import AttendanceRecordSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +360,66 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": "No student record found for the logged-in user."
             }, status=status.HTTP_404_NOT_FOUND)
 
+    from django.utils import timezone
+
+    @action(detail=False, methods=['GET'], url_path='supervisor-attendance')
+    def get_supervisor_attendance(self, request):
+        """
+        Get attendance records of students whose tracks are managed by the logged-in supervisor
+        for a specific date (defaults to today if not provided) and optionally for a specific track.
+        """
+        try:
+            supervisor = request.user
+
+            if not Track.objects.filter(supervisor=supervisor).exists():
+                return Response({
+                    "status": "error",
+                    "message": "You are not assigned as a supervisor to any track."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            date_str = request.query_params.get('date')
+            if date_str:
+                try:
+                    date = timezone.datetime.strptime(date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return Response({
+                        "status": "error",
+                        "message": "Invalid date format. Please use YYYY-MM-DD."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                date = timezone.now().date()
+
+            track_id = request.query_params.get('track_id')
+            tracks = Track.objects.filter(supervisor=supervisor)
+
+            if track_id:
+                tracks = tracks.filter(id=track_id)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "The specified track does not exist or is not managed by you."
+                    }, status=status.HTTP_404_NOT_FOUND)
+
+            attendance_records = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                schedule__created_at=date 
+            )
+
+            serializer = AttendanceRecordSerializer(attendance_records, many=True)
+
+            return Response({
+                "status": "success",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
         Calculate the distance between two coordinates using the Haversine formula.
@@ -377,7 +439,7 @@ class AttendanceViewSet(viewsets.ViewSet):
         dlon = lon2_rad - lon1_rad
         
         # Haversine formula
-        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+        a = math.sin(dlat/2)*2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)*2
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
         distance = R * c
         
