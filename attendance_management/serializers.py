@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest
 from users.models import CustomUser
+from datetime import datetime
 
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -128,6 +129,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         """
         Determine the status of the attendance record based on the conditions.
         """
+        if obj.schedule.created_at > datetime.now().date():
+            return 'pending'
         # get the permission request for the student and schedule
         permission_request = PermissionRequest.objects.filter(
             student=obj.student, 
