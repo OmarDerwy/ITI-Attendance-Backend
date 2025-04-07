@@ -131,6 +131,7 @@ class BranchSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'latitude', 'longitude', 'location_url', 'radius']
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()  # updated student field
     status = serializers.SerializerMethodField()
     adjusted_time = serializers.SerializerMethodField()
 
@@ -148,6 +149,15 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'status', 
             'adjusted_time'
         ]
+
+    def get_student(self, obj):
+        """
+        Return first_name and last_name from the CustomUser model via Student.user.
+        """
+        return {
+            "first_name": obj.student.user.first_name,
+            "last_name": obj.student.user.last_name
+        }
 
     def get_status(self, obj):
         """
