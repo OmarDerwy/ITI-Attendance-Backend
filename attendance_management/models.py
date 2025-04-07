@@ -10,7 +10,7 @@ class Branch(models.Model):
     location_url = models.URLField(blank=True, null=True)
     radius = models.FloatField(validators=[MinValueValidator(0)])
 
-    def __str__(self):
+    def _str_(self):
         return self.name
     
 class Track(models.Model):
@@ -26,7 +26,7 @@ class Track(models.Model):
     ]
     program_type = models.CharField(max_length=20, choices=PROGRAM_CHOICES, default='nine_months')
 
-    def __str__(self):
+    def _str_(self):
         return self.name
 
 class Schedule(models.Model):
@@ -44,7 +44,7 @@ class Schedule(models.Model):
             self.custom_branch = self.track.default_branch
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def _str_(self):
         return self.name
 
 class Session(models.Model):
@@ -70,7 +70,7 @@ class Student(models.Model):  # Renamed from StudentInfo
     laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
     is_checked_in = models.BooleanField(default=False)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.user.first_name} {self.user.last_name} - {self.track.name}"
 
 class AttendanceRecord(models.Model):
@@ -88,7 +88,7 @@ class AttendanceRecord(models.Model):
     early_leave = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='none')
     late_check_in = models.CharField(max_length=255, choices=PERMISSION_CHOICES, blank=True, null=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"AttendanceRecord(Student: {self.student}, Schedule: {self.schedule})"
 
 
@@ -109,10 +109,9 @@ class PermissionRequest(models.Model):
     reason = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     schedule = models.ForeignKey('Schedule', on_delete=models.CASCADE, related_name='permission_requests', null=True, blank=True)
+    adjusted_time = models.DateTimeField(blank=True, null=True) 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.student} - {self.request_type} ({self.status})"
-
-

@@ -131,12 +131,89 @@ class BranchSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'latitude', 'longitude', 'location_url', 'radius']
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
+    adjusted_time = serializers.SerializerMethodField()
+
     class Meta:
         model = AttendanceRecord
-        fields = ['id', 'student', 'schedule', 'check_in_time', 'check_out_time', 'excuse', 'early_leave', 'late_check_in']
+        fields = [
+            'id', 
+            'student', 
+            'schedule', 
+            'check_in_time', 
+            'check_out_time', 
+            'excuse', 
+            'early_leave', 
+            'late_check_in', 
+            'status', 
+            'adjusted_time'
+        ]
+
+    def get_status(self, obj):
+        """
+        Determine the status of the attendance record based on the conditions.
+        """
+        # get the permission request for the student and schedule
+        permission_request = PermissionRequest.objects.filter(
+            student=obj.student, 
+            schedule=obj.schedule, 
+            status='approved'
+        ).first()
+
+        adjusted_time = permission_request.adjusted_time if permission_request else None
+
+        # student has not checked in
+        if not obj.check_in_time:
+            if obj.excuse == 'none':
+                return 'absent'
+            elif obj.excuse == 'approved':
+                return 'excused'
+            elif obj.excuse == 'pending':
+                return 'pending'
+
+        # Student has checked in
+        if adjusted_time:
+            if obj.check_in_time <= adjusted_time:
+                return 'excused'
+            else:
+                return 'excused but late'
+
+        if obj.late_check_in == 'approved':
+            return 'excused but late'
+        elif obj.late_check_in == 'pending':
+            return 'pending'
+        elif obj.check_in_time > obj.schedule.sessions.first().start_time:
+            return 'late'
+        else:
+            return 'attended'
+
+    def get_adjusted_time(self, obj): #used by DRF implicitly 
+        """
+        Calculate the adjusted time based on the permission request.
+        """
+        permission_request = PermissionRequest.objects.filter(
+            student=obj.student, 
+            schedule=obj.schedule, 
+            status='approved'
+        ).first()
+
+        if permission_request:
+            return permission_request.adjusted_time
+
+        return obj.check_in_time
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = PermissionRequest
-        fields = ['id', 'student', 'schedule', 'request_type', 'reason', 'status', 'created_at', 'updated_at']
+        fields = [
+            'id', 
+            'student', 
+            'schedule', 
+            'request_type', 
+            'reason', 
+            'status', 
+            'adjusted_time', 
+            'created_at', 
+            'updated_at'
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
