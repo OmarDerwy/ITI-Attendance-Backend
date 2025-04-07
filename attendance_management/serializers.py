@@ -8,12 +8,37 @@ class SessionSerializer(serializers.ModelSerializer):
         model = Session
         fields = ['id', 'title', 'instructor', 'start_time', 'end_time', 'session_type', 'schedule']
 
-class ScheduleSerializer(serializers.ModelSerializer):
-    sessions = SessionSerializer(many=True, read_only=True)
+class MiniTrackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Track
+        fields = ['id', 'name']
 
+class ScheduleSerializer(serializers.ModelSerializer):
+    track = MiniTrackSerializer(read_only=True)  # Read-only field for track
+    sessions = serializers.StringRelatedField(many=True, read_only=True)  # Read-only field for sessions
+    start_time = serializers.SerializerMethodField()
+    end_time = serializers.SerializerMethodField()
+    
     class Meta:
         model = Schedule
-        fields = ['name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared']
+        fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time']
+
+    def get_start_time(self, obj):
+        """Get the start time from the first session of the day"""
+        first_session = Session.objects.filter(schedule=obj).order_by('start_time').first()
+        return first_session.start_time if first_session else None
+        
+    def get_end_time(self, obj):
+        """Get the end time from the last session of the day"""
+        last_session = Session.objects.filter(schedule=obj).order_by('-end_time').first()
+        return last_session.end_time if last_session else None
+
+    def get_fields(self):
+        fields = super().get_fields()
+        view = self.context.get('view')
+        if view and view.action == 'retrieve':
+            fields['attendance_records'] = AttendanceRecordSerializer(many=True, read_only=True)
+        return fields
 
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
@@ -107,6 +132,7 @@ class BranchSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'latitude', 'longitude', 'location_url', 'radius']
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()  # updated student field
     status = serializers.SerializerMethodField()
     adjusted_time = serializers.SerializerMethodField()
 
@@ -124,6 +150,15 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'status', 
             'adjusted_time'
         ]
+
+    def get_student(self, obj):
+        """
+        Return first_name and last_name from the CustomUser model via Student.user.
+        """
+        return {
+            "first_name": obj.student.user.first_name,
+            "last_name": obj.student.user.last_name
+        }
 
     def get_status(self, obj):
         """
