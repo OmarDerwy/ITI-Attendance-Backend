@@ -1,13 +1,17 @@
 meta {
-  name: sandbox
+  name: rejectRequests (supervisor)
   type: http
-  seq: 1
+  seq: 3
 }
 
-get {
-  url: http://localhost:8000/api/v1/attendance/permission-requests
+post {
+  url: http://localhost:8000/api/v1/attendance/permission-requests/:id/reject
   body: none
   auth: inherit
+}
+
+params:path {
+  id: 
 }
 
 script:pre-request {

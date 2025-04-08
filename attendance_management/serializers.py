@@ -228,6 +228,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         return pending_request
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()  # updated student field
+    schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
     class Meta:
         model = PermissionRequest
         fields = [
@@ -242,3 +244,13 @@ class PermissionRequestSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
+
+    def get_student(self, obj):
+        """
+        Return first_name and last_name from the CustomUser model via Student.user.
+        """
+        return {
+            "first_name": obj.student.user.first_name,
+            "last_name": obj.student.user.last_name,
+            "phone_number": obj.student.user.phone_number,
+        }
