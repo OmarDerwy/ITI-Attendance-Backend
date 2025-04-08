@@ -277,5 +277,10 @@ LOGGING = {
             'level': 'DEBUG',  # Show all logs from your app
             'propagate': False,
         },
+        'attendance_management': {
+            'handlers': ['console'],
+            'level': 'DEBUG',  # Show all logs from your app
+            'propagate': False,
+        },
     },
 }
