@@ -12,6 +12,7 @@ import logging
 from .utils import match_lost_and_found_items, send_and_save_notification
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db import models  # Add this import for Q objects
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -143,6 +144,11 @@ class FoundItemViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+class MatchedItemPagination(PageNumberPagination):
+    page_size = 3
+    page_size_query_param = 'page_size'
+    max_page_size = 10
+
 class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint to view and confirm matched items (Read-Only).
@@ -150,12 +156,16 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MatchedItem.objects.select_related('lost_item__user', 'found_item__user').order_by('-created_at')
     serializer_class = MatchedItemSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = PageNumberPagination
+    pagination_class = MatchedItemPagination  # Use the custom pagination class
 
     def get_queryset(self):
         qs = super().get_queryset()
         if not self.request.user.is_staff:
-            qs = qs.filter(lost_item__user=self.request.user)
+            # Users can see matches where they are either the lost item owner or found item owner
+            qs = qs.filter(
+                models.Q(lost_item__user=self.request.user) | 
+                (models.Q(found_item__user=self.request.user) & models.Q(status=MatchedItem.MatchingResult.SUCCEEDED))
+            )
         return qs
 
     @action(detail=True, methods=['POST'], url_path='confirm-match', url_name='confirm-match')
@@ -164,7 +174,6 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
         Allow the owner of the lost item to confirm if a match is valid.
         """
         match = get_object_or_404(MatchedItem, pk=pk)
-
         # only the lost item owner or admin can confirm the match
         if match.lost_item.user != request.user or request.user.is_staff:
             return Response({"error": "You are not authorized to confirm this match."}, status=403)
@@ -218,14 +227,12 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
             f"Congratulations! We found the owner of the item you submitted: '{match.found_item.name}'. "
             f"The owner's name is {match.lost_item.user}."
         )
-
         # Use the utility function instead of separate operations
         send_and_save_notification(
             user=found_item_user,
             title="Owner Found!",
             message=notification_message
         )
-
         return Response({
             "message": "Match status updated to SUCCEEDED and item statuses updated to CONFIRMED.",
             "notification": notification_message,
@@ -237,7 +244,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
     permission_classes=[IsAuthenticated]
-    
+
     def get_queryset(self):
         return super().get_queryset().filter(user=self.request.user)
 
@@ -248,6 +255,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
         unread_notifications = self.get_queryset().filter(is_read=False)
         serializer = self.get_serializer(unread_notifications, many=True)
         return Response(serializer.data)
+
     @action(detail=True, methods=["POST"])
     def mark_as_read(self, request, pk=None):
         """Mark a notification as read"""
