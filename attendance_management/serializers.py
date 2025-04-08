@@ -242,7 +242,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field
-    schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
+    schedule = ScheduleSerializer(read_only=False)  # Read-only field for schedule
     class Meta:
         model = PermissionRequest
         fields = [

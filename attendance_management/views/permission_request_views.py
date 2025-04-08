@@ -1,7 +1,7 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from ..models import PermissionRequest
+from ..models import PermissionRequest, Schedule
 from ..serializers import PermissionRequestSerializer
 from core.permissions import IsSupervisorOrAboveUser, IsStudentOrAboveUser
 
@@ -12,6 +12,37 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
     """
     queryset = PermissionRequest.objects.select_related('student__user').all()  # Updated to use Student
     serializer_class = PermissionRequestSerializer
+
+    def create(self, request, *args, **kwargs):
+
+        request_type = request.data.get('request_type')
+        adjusted_time = request.data.get('adjusted_time')
+        reason = request.data.get('reason')
+        schedule_id = request.data.get('schedule')
+
+        # get schedule object
+        if schedule_id:
+            try:
+                schedule = Schedule.objects.get(id=schedule_id)
+            except Schedule.DoesNotExist:
+                return Response({'error': 'Schedule not found'}, status=404)
+
+        student = request.user.student_profile
+        
+        permission_request = PermissionRequest.objects.create(
+            student=student,
+            request_type=request_type,
+            adjusted_time=adjusted_time,
+            reason=reason,
+            schedule=schedule,
+        )
+
+        permission_request.save()
+        return Response({
+            'message': 'Request created successfully',
+            'object': self.get_serializer(permission_request).data,
+            'data': request.data,
+        })
 
     def get_permissions(self):
         """
