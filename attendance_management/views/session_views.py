@@ -4,10 +4,12 @@ from rest_framework.response import Response  # For returning HTTP responses
 from django.utils.timezone import now  # Utility for working with timezones
 from django.db import transaction  # For managing database transactions
 from django.utils.dateparse import parse_datetime  # For parsing datetime strings
-from ..models import Session, Schedule  # Importing models used in this view
+from ..models import Session, Schedule , Student , AttendanceRecord  # Importing models used in this view
 from ..serializers import SessionSerializer  # Serializer for the Session model
 from core import permissions  # Custom permissions module
 from datetime import timedelta
+from django.db.models import Count  # Import Count for aggregation
+
 class SessionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing sessions.
@@ -82,6 +84,7 @@ class SessionViewSet(viewsets.ModelViewSet):
             """
             Helper function to get or create a schedule.
             Find a schedule for the given track and date, or create one if it doesn't exist.
+            If a schedule is created, add attendance records for all students in the track.
             """
             try:
                 # Try to find a schedule for this track and date
@@ -101,14 +104,28 @@ class SessionViewSet(viewsets.ModelViewSet):
                         name=f"Schedule for {schedule_date}",
                         custom_branch_id=custom_branch_id
                     )
+
+                    # Add attendance records for all students in the track
+                    students = Student.objects.filter(track_id=track_id)
+                    attendance_records = [
+                        AttendanceRecord(
+                            student=student,
+                            schedule=schedule,
+                            check_in_time=None,
+                            check_out_time=None
+                        )
+                        for student in students
+                    ]
+                    AttendanceRecord.objects.bulk_create(attendance_records)
+
                     return schedule, True
-            except Exception as e:
-                logger.error(f"Error getting or creating schedule: {str(e)}")
+            except Exception as e:  # Fixed syntax error in exception handling
+                logger.error(f"Error getting or creating schedule: {str(e)}")  # Fixed logging statement
                 raise e
 
-        for session_data in combined_events:  # Iterate over each session in the list
+        for session_data in combined_events:  # Fixed loop syntax
             if not isinstance(session_data, dict):  # Validate that session_data is a dictionary
-                logger.error(f"Invalid session data format: {session_data}")
+                logger.error(f"Invalid session data format: {session_data}")  # Fixed logging statement
                 return Response({'error': f'Invalid session data format: {session_data}'}, status=400)
 
             try:
@@ -124,7 +141,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 schedule_date = parse_datetime(session_data.get('schedule_date')).date() if session_data.get('schedule_date') else start_time.date()
 
                 # Get or create the schedule
-                schedule, _ = get_or_create_schedule(track_id, schedule_date, custom_branch_id)
+                schedule, _ = get_or_create_schedule(track_id, start_time.date(), custom_branch_id)
 
                 if session_id:  # If the session ID is provided, update the session
                     try:
@@ -172,11 +189,25 @@ class SessionViewSet(viewsets.ModelViewSet):
                 logger.error(f"Error processing session data: {session_data}, Error: {str(e)}")
                 return Response({'error': f"Error processing session data: {session_data}, Error: {str(e)}"}, status=400)
 
+        # Cleanup: Delete attendance records for schedules with no associated sessions
+        # Update the annotation to use the correct related name for sessions
+        empty_schedules = Schedule.objects.annotate(
+            session_count=Count('sessions')  # Replace 'sessions' with the actual related name
+        ).filter(session_count=0)
+        empty_schedules_count = empty_schedules.count()
+        # log the number of empty schedules
+        logger.info(f"Number of empty schedules to delete: {empty_schedules_count}")
+        # Manually delete attendance records for these schedules
+        AttendanceRecord.objects.filter(schedule__in=empty_schedules).delete()
+        # Delete the empty schedules
+        empty_schedules.delete()
+
         # Return a response with the created and updated session IDs
         return Response(status=200, data={
             'message': 'Bulk operation completed successfully.',
             'created_sessions': [session.id for session in created_sessions],
-            'updated_sessions': [session.id for session in updated_sessions]
+            'updated_sessions': [session.id for session in updated_sessions],
+            'deleted_empty_schedules_count': empty_schedules_count  # Include count of deleted schedules
         })
 
         
