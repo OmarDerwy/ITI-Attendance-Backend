@@ -198,8 +198,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         if 'supervisor' not in request_user.groups.all().values_list('name', flat=True):
             return Response({'error': 'You do not have permission to create users'}, status=403)
         
-        # Find the supervisor's track
-        track_obj = request_user.tracks.first()
+        # Get the track object from the body
+        track_id = request.data.get('track_id')
+        if not track_id:
+            return Response({'error': 'Track ID is required'}, status=400)
+        track_obj = request_user.tracks.get(id=track_id)
+        # track_obj = request_user.tracks.first()
         if not track_obj:
             return Response({'error': 'You are not currently the supervisor of any track'}, status=400)
         
@@ -216,7 +220,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             is_active=False,
             first_name=request.data.get('first_name'),
             last_name=request.data.get('last_name'),
-            phone_number=request.data.get('phone_number')
+            phone_number=request.data.get('phone_number'),
         )
         
         # Create student profile and associate with track
@@ -268,11 +272,12 @@ class BulkCreateStudents(APIView):
             first_name = user_data.get('first_name')
             last_name = user_data.get('last_name')
             phone_number = user_data.get('phone_number')
+            track = user_data.get('track_id')
 
             # find track
-            track_obj = requestUser.tracks.first()
+            track_obj = requestUser.tracks.get(id=track) if track else None
             if not track_obj:
-                return Response({'error': f'You currently are the supervisor of any track.'}, status=400)
+                return Response({'error': f'You currently arent the supervisor of any track.'}, status=400)
 
             print(f"Creating user with email: {email}, track: {track_obj}, track_name: {track_obj}")
 
