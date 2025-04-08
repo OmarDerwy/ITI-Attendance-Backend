@@ -31,7 +31,7 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         """
         user = self.request.user
         if user.groups.filter(name='supervisor').exists():
-            return self.queryset.filter(student__track__supervisor=user)
+            return self.queryset.filter(student__track__supervisor=user).filter(status='pending')
         return self.queryset.filter(student__user=user)
 
     @action(detail=True, methods=['post'], url_path='approve')
@@ -41,9 +41,16 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         Only supervisors or admins can perform this action.
         """
         permission_request = self.get_object()
+
+        adjusted_time = request.data.get('adjusted_time')
+        permission_request.adjusted_time = adjusted_time
         permission_request.status = 'approved'
         permission_request.save()
-        return Response({'message': 'Request approved successfully'})
+        return Response({
+            'message': 'Request tested successfully',
+            'object': self.get_serializer(permission_request).data,
+            'data': request.data,
+        })
 
     @action(detail=True, methods=['post'], url_path='reject')
     def reject(self, request, pk=None):

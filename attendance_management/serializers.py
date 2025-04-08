@@ -18,10 +18,11 @@ class ScheduleSerializer(serializers.ModelSerializer):
     sessions = serializers.StringRelatedField(many=True, read_only=True)  # Read-only field for sessions
     start_time = serializers.SerializerMethodField()
     end_time = serializers.SerializerMethodField()
+    attended_out_of_total = serializers.SerializerMethodField()
     
     class Meta:
         model = Schedule
-        fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time']
+        fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time', 'attended_out_of_total']
 
     def get_start_time(self, obj):
         """Get the start time from the first session of the day"""
@@ -39,7 +40,19 @@ class ScheduleSerializer(serializers.ModelSerializer):
         if view and view.action == 'retrieve':
             fields['attendance_records'] = AttendanceRecordSerializer(many=True, read_only=True)
         return fields
-
+    
+    def get_attended_out_of_total(self, obj):
+        """
+        Calculate the number of students attended the schedule out of total students in the track using the available attendance records.
+        """
+        total_students = obj.track.students.count()
+        attended_students = AttendanceRecord.objects.filter(schedule=obj, check_in_time__isnull=False).values_list('student', flat=True).distinct().count()
+        
+        return {
+            "attended": attended_students,
+            "total": total_students
+        }
+        
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
         model = Student
