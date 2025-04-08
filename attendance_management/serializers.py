@@ -135,6 +135,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field
     status = serializers.SerializerMethodField()
     adjusted_time = serializers.SerializerMethodField()
+    track_name = serializers.SerializerMethodField()  
+
 
     class Meta:
         model = AttendanceRecord
@@ -148,7 +150,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'early_leave', 
             'late_check_in', 
             'status', 
-            'adjusted_time'
+            'adjusted_time',
+            'track_name',
         ]
 
     def get_student(self, obj):
@@ -214,6 +217,11 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             return permission_request.adjusted_time
 
         return obj.check_in_time
+    def get_track_name(self, obj):
+        """
+        Get the track name from the student object.
+        """
+        return obj.student.track.name if obj.student and obj.student.track else None
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     class Meta:

@@ -11,6 +11,9 @@ from django.utils import timezone
 from core.permissions import IsSupervisorOrAboveUser  # Changed from relative to absolute import
 from ..models import Track
 from ..serializers import AttendanceRecordSerializer
+from django.db.models import Count, Q
+from datetime import timedelta
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 
 logger = logging.getLogger(__name__)
 
@@ -359,9 +362,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": "No student record found for the logged-in user."
             }, status=status.HTTP_404_NOT_FOUND)
-    # add a new endpoint to get multiple attendance records by schedule
-
-    from django.utils import timezone
 
     @action(detail=False, methods=['GET'], url_path='supervisor-attendance')
     def get_supervisor_attendance(self, request):
@@ -408,9 +408,45 @@ class AttendanceViewSet(viewsets.ViewSet):
 
             serializer = AttendanceRecordSerializer(attendance_records, many=True)
 
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+        except Exception as e:
             return Response({
-                "status": "success",
-                "data": serializer.data
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'], url_path='attendance-percentage/today')
+    def get_todays_attendance_percentage(self, request):
+        """
+        Get today's attendance percentage for the tracks managed by the logged-in supervisor.
+        """
+        try:
+            supervisor = request.user
+            if not Track.objects.filter(supervisor=supervisor).exists():
+                return Response({
+                    "status": "error",
+                    "message": "You are not assigned as a supervisor to any track."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            date = timezone.now().date()
+            tracks = Track.objects.filter(supervisor=supervisor)
+
+            total_students = Student.objects.filter(track__in=tracks).count()
+            attended_students = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                schedule__created_at=date,
+                check_in_time__isnull=False
+            ).count()
+
+            attendance_percentage = (attended_students / total_students) * 100 if total_students > 0 else 0
+
+            return Response({
+                "date": date,
+                "total_students": total_students,
+                "attended_students": attended_students,
+                "attendance_percentage": round(attendance_percentage, 2)
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -419,7 +455,107 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=False, methods=['GET'], url_path='attendance-percentage/weekly')
+    def get_weekly_attendance_percentage(self, request):
+        """
+        Get weekly attendance percentage for the tracks managed by the logged-in supervisor.
+        """
+        try:
+            supervisor = request.user
+            if not Track.objects.filter(supervisor=supervisor).exists():
+                return Response({
+                    "status": "error",
+                    "message": "You are not assigned as a supervisor to any track."
+                }, status=status.HTTP_403_FORBIDDEN)
 
+            end_date = timezone.now().date()
+            start_date = end_date - timedelta(days=7)
+            tracks = Track.objects.filter(supervisor=supervisor)
+
+            total_students = Student.objects.filter(track__in=tracks).count()
+            attended_students = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                schedule__created_at__range=(start_date, end_date),
+                check_in_time__isnull=False
+            ).values('student').distinct().count()
+
+            attendance_percentage = (attended_students / total_students) * 100 if total_students > 0 else 0
+
+            return Response({
+                "start_date": start_date,
+                "end_date": end_date,
+                "total_students": total_students,
+                "attended_students": attended_students,
+                "attendance_percentage": round(attendance_percentage, 2)
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'], url_path='attendance-trends')
+    def get_attendance_trends(self, request):
+        """
+        Get attendance trends (daily, weekly, and monthly) for the tracks managed by the logged-in supervisor.
+        Optionally filter by a specific track using the 'track_id' query parameter.
+        """
+        try:
+            supervisor = request.user
+            if not Track.objects.filter(supervisor=supervisor).exists():
+                return Response({
+                    "status": "error",
+                    "message": "You are not assigned as a supervisor to any track."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get the track_id from query parameters
+            track_id = request.query_params.get('track_id')
+            tracks = Track.objects.filter(supervisor=supervisor)
+
+            if track_id:
+                tracks = tracks.filter(id=track_id)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "The specified track does not exist or is not managed by you."
+                    }, status=status.HTTP_404_NOT_FOUND)
+
+            # Daily trends
+            daily_trends = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                check_in_time__isnull=False
+            ).annotate(date=TruncDate('schedule__created_at')).values('date').annotate(
+                attended=Count('id')
+            ).order_by('date')
+
+            # Weekly trends
+            weekly_trends = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                check_in_time__isnull=False
+            ).annotate(week=TruncWeek('schedule__created_at')).values('week').annotate(
+                attended=Count('id')
+            ).order_by('week')
+
+            # Monthly trends
+            monthly_trends = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                check_in_time__isnull=False
+            ).annotate(month=TruncMonth('schedule__created_at')).values('month').annotate(
+                attended=Count('id')
+            ).order_by('month')
+
+            return Response({
+                "daily_trends": list(daily_trends),
+                "weekly_trends": list(weekly_trends),
+                "monthly_trends": list(monthly_trends)
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
