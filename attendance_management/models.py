@@ -10,7 +10,7 @@ class Branch(models.Model):
     location_url = models.URLField(blank=True, null=True)
     radius = models.FloatField(validators=[MinValueValidator(0)])
 
-    def _str_(self):
+    def __str__(self):
         return self.name
     
 class Track(models.Model):
@@ -26,7 +26,7 @@ class Track(models.Model):
     ]
     program_type = models.CharField(max_length=20, choices=PROGRAM_CHOICES, default='nine_months')
 
-    def _str_(self):
+    def __str__(self):
         return self.name
 
 class Schedule(models.Model):
@@ -44,8 +44,8 @@ class Schedule(models.Model):
             self.custom_branch = self.track.default_branch
         super().save(*args, **kwargs)
 
-    def _str_(self):
-        return self.name
+    def __str__(self):
+        return f"{self.name} - {self.track.name}"
 
 class Session(models.Model):
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='schedules')
@@ -70,7 +70,7 @@ class Student(models.Model):  # Renamed from StudentInfo
     laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
     is_checked_in = models.BooleanField(default=False)
 
-    def _str_(self):
+    def __str__(self):
         return f"{self.user.first_name} {self.user.last_name} - {self.track.name}"
 
 class AttendanceRecord(models.Model):
@@ -113,5 +113,5 @@ class PermissionRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def _str_(self):
+    def __str__(self):
         return f"{self.student} - {self.request_type} ({self.status})"

@@ -135,6 +135,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field
     status = serializers.SerializerMethodField()
     adjusted_time = serializers.SerializerMethodField()
+    pending_leave_request = serializers.SerializerMethodField()
 
     class Meta:
         model = AttendanceRecord
@@ -143,7 +144,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'student', 
             'schedule', 
             'check_in_time', 
-            'check_out_time', 
+            'check_out_time',
+            'pending_leave_request', # for checking if this attendance record is pending leave request or not
             'excuse', 
             'early_leave', 
             'late_check_in', 
@@ -214,6 +216,16 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             return permission_request.adjusted_time
 
         return obj.check_in_time
+    def get_pending_leave_request(self, obj):
+        """
+        Check if there is a pending leave request for the student and schedule.
+        """
+        pending_request = PermissionRequest.objects.filter(
+            student=obj.student, 
+            schedule=obj.schedule, 
+            status='pending'
+        ).exists()
+        return pending_request
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     class Meta:
