@@ -18,10 +18,11 @@ class ScheduleSerializer(serializers.ModelSerializer):
     sessions = serializers.StringRelatedField(many=True, read_only=True)  # Read-only field for sessions
     start_time = serializers.SerializerMethodField()
     end_time = serializers.SerializerMethodField()
+    attended_out_of_total = serializers.SerializerMethodField()
     
     class Meta:
         model = Schedule
-        fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time']
+        fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time', 'attended_out_of_total']
 
     def get_start_time(self, obj):
         """Get the start time from the first session of the day"""
@@ -39,7 +40,19 @@ class ScheduleSerializer(serializers.ModelSerializer):
         if view and view.action == 'retrieve':
             fields['attendance_records'] = AttendanceRecordSerializer(many=True, read_only=True)
         return fields
-
+    
+    def get_attended_out_of_total(self, obj):
+        """
+        Calculate the number of students attended the schedule out of total students in the track using the available attendance records.
+        """
+        total_students = obj.track.students.count()
+        attended_students = AttendanceRecord.objects.filter(schedule=obj, check_in_time__isnull=False).values_list('student', flat=True).distinct().count()
+        
+        return {
+            "attended": attended_students,
+            "total": total_students
+        }
+        
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
         model = Student
@@ -135,6 +148,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field
     status = serializers.SerializerMethodField()
     adjusted_time = serializers.SerializerMethodField()
+    pending_leave_request = serializers.SerializerMethodField()
     track_name = serializers.SerializerMethodField()  
 
 
@@ -145,7 +159,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'student', 
             'schedule', 
             'check_in_time', 
-            'check_out_time', 
+            'check_out_time',
+            'pending_leave_request', # for checking if this attendance record is pending leave request or not
             'excuse', 
             'early_leave', 
             'late_check_in', 
@@ -217,6 +232,16 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             return permission_request.adjusted_time
 
         return obj.check_in_time
+    def get_pending_leave_request(self, obj):
+        """
+        Check if there is a pending leave request for the student and schedule.
+        """
+        pending_request = PermissionRequest.objects.filter(
+            student=obj.student, 
+            schedule=obj.schedule, 
+            status='pending'
+        ).exists()
+        return pending_request
     def get_track_name(self, obj):
         """
         Get the track name from the student object.
@@ -224,6 +249,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         return obj.student.track.name if obj.student and obj.student.track else None
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()  # updated student field
+    schedule = ScheduleSerializer(read_only=False)  # Read-only field for schedule
     class Meta:
         model = PermissionRequest
         fields = [
@@ -238,3 +265,13 @@ class PermissionRequestSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
+
+    def get_student(self, obj):
+        """
+        Return first_name and last_name from the CustomUser model via Student.user.
+        """
+        return {
+            "first_name": obj.student.user.first_name,
+            "last_name": obj.student.user.last_name,
+            "phone_number": obj.student.user.phone_number,
+        }

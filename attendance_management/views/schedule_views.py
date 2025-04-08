@@ -39,3 +39,10 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(track_id=track_id)
 
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        user = request.user
+        groups = user.groups.values_list('name', flat=True)
+        if 'student' in groups:
+            self.pagination_class = None  # Disable pagination for students
+        return super().list(request, *args, **kwargs)
