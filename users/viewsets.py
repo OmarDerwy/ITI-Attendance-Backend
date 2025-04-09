@@ -11,7 +11,7 @@ from django.utils.crypto import get_random_string
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
-
+from django.db.models import Q
 # import from attendance_management
 from attendance_management import models as attend_models
 
@@ -181,11 +181,26 @@ class StudentViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.StudentsSerializer
     permission_classes = [core_permissions.IsSupervisorOrAboveUser]
 
+    def get_paginated_response(self, data):
+        # add a count of is_active students
+        queryset = self.get_queryset()
+        active_students = queryset.filter(is_active=True).count()
+        inactive_students = queryset.filter(is_active=False).count()
+
+        response = super().get_paginated_response(data)
+        response.data['active_users'] = active_students
+        response.data['inactive_users'] = inactive_students
+
+        return response
+
     def get_queryset(self):
         requestUser = self.request.user
         requestUserGroups = requestUser.groups.all()
         allUsers = models.CustomUser.objects.all()
+        searchParam = self.request.query_params.get('search', None)
         students = allUsers.filter(groups__name='student') # TODO not all students actually possess the student group, need to fix database later
+        if searchParam:
+            students = students.filter(Q(email__icontains=searchParam) | Q(first_name__icontains=searchParam) | Q(last_name__icontains=searchParam)) # TODO consider adding capability for admins to view all students and add them
         if 'supervisor' in requestUserGroups.values_list('name', flat=True):
             hisTrack = requestUser.tracks.all()
             students = students.filter(student_profile__track__in=hisTrack)
