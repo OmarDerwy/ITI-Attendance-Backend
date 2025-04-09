@@ -239,6 +239,30 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             status='pending'
         ).exists()
         return pending_request
+    
+    # def to_representation(self, instance):
+    #     data = super().to_representation(instance)
+    #     if self.context.get('view').action == 'retrieve':
+    #         # Include the schedule name in the response
+    #         scheduleData = ScheduleSerializer(instance.schedule).data
+    #         data['schedule'] = scheduleData
+    #     return data
+
+class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
+    schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
+    class Meta:
+        model = AttendanceRecord
+        fields = [
+            'id', 
+            'schedule', 
+            'check_in_time', 
+            'check_out_time',
+            'excuse', 
+            'early_leave', 
+            'late_check_in',
+            'status',
+            'adjusted_time'
+        ]
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field

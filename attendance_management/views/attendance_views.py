@@ -9,8 +9,8 @@ from django.shortcuts import get_object_or_404
 from users.models import CustomUser
 from django.utils import timezone
 from core.permissions import IsSupervisorOrAboveUser  # Changed from relative to absolute import
-from ..models import Track
-from ..serializers import AttendanceRecordSerializer
+from ..models import PermissionRequest, Track
+from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents
 
 logger = logging.getLogger(__name__)
 
@@ -501,6 +501,48 @@ class AttendanceViewSet(viewsets.ViewSet):
             logger.error(f"Error manually recording attendance: {str(e)}")
             return Response({
                 "error": f"An error occurred: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'], url_path='upcoming-records')
+    def get_upcoming_records(self, request):
+        """
+        Get upcoming attendance records for the logged-in student.
+        Returns attendance records where the schedule date is today or in the future.
+        """
+        try:
+            # Get the logged-in user's student profile
+            student = Student.objects.get(user=request.user)
+            
+            # Get current date
+            today = timezone.now().date()
+            
+            # Fetch attendance records where schedule date is today or in the future
+            upcoming_records = AttendanceRecord.objects.filter(
+                student=student,
+                schedule__created_at__gte=today,
+                check_in_time__isnull=True,  # Ensure check-in time is not set
+            ).order_by('schedule__created_at')
+
+            student_permission_request = PermissionRequest.objects.filter(student=student)
+            if student_permission_request.exists():
+                upcoming_records = upcoming_records.exclude(schedule__id__in=student_permission_request.values_list('schedule__id', flat=True))
+            
+            serializer = AttendanceRecordSerializerForStudents(upcoming_records, many=True)
+            
+            return Response({
+                "status": "success",
+                "data": serializer.data
+            })
+        except Student.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "No student record found for the logged-in user."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching upcoming attendance records: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"An error occurred: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
