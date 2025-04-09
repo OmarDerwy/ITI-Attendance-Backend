@@ -206,8 +206,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             else:
                 return 'excused but late'
 
-        if obj.late_check_in == 'approved':
-            return 'excused but late'
+        if obj.late_check_in == 'approved': #??
+            return 'excused but late'       
         elif obj.late_check_in == 'pending':
             return 'pending'
         elif obj.check_in_time > obj.schedule.sessions.first().start_time:

@@ -20,3 +20,4 @@ class TrackViewSet(viewsets.ModelViewSet):
 
     
     serializer_class = TrackSerializer
+    pagination_class = None 

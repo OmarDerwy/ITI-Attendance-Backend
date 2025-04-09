@@ -249,6 +249,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
     permission_classes=[IsAuthenticated]
+    pagination_class = None  # Remove pagination for this viewset
 
     def get_queryset(self):
         return super().get_queryset().filter(user=self.request.user)
