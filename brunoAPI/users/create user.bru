@@ -6,7 +6,7 @@ meta {
 
 post {
   url: http://localhost:8000/api/v1/accounts/users/
-  body: multipartForm
+  body: json
   auth: inherit
 }
 
@@ -14,23 +14,35 @@ params:query {
   : 
 }
 
+body:json {
+  {
+      "first_name": "ss",
+      "last_name": "s",
+      "email": "sssss@sss.com",
+      "phone_number": "",
+      "groups": [
+          "supervisor"
+      ]
+  }
+}
+
 body:multipart-form {
   : 
 }
 
 script:pre-request {
-  const {faker} = require('@faker-js/faker')
-  // const first_name = faker.person.firstName()
-  // const last_name = faker.person.lastName()
-  const email = faker.internet.email()
-  const password = faker.internet.password()
-  const groups = [1]
+  // const {faker} = require('@faker-js/faker')
+  // // const first_name = faker.person.firstName()
+  // // const last_name = faker.person.lastName()
+  // const email = faker.internet.email()
+  // const password = faker.internet.password()
+  // const groups = [1]
   
-  req.setBody({
-    email,
-    password,
-    groups
-  })
+  // req.setBody({
+  //   email,
+  //   password,
+  //   groups
+  // })
 }
 
 docs {

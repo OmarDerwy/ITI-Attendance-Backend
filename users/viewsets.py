@@ -64,6 +64,64 @@ class UserViewSet(viewsets.ModelViewSet):
         data = self.get_queryset().filter(groups=group)
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='admins-and-supervisors')
+    def admins_supervisors_list(self, request):
+        group = Group.objects.filter(name__in=["admin", "supervisor"])
+        data = self.get_queryset().filter(groups__in=group).distinct()
+        serializer = self.get_serializer(data, many=True)
+        return Response(serializer.data)
+    
+    # use this endpoint to add new user (admin/supervisor)
+    def create(self, request, *args, **kwargs):
+        # Check supervisor permissions
+        # request_user = self.request.user
+        # if not request_user.groups.filter(name='admin').exists():        # .all().values_list('name', flat=True):
+        #     return Response({'error': 'You do not have permission to create users'}, status=403)
+        
+        # Extract required data
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=400)
+        
+        # Create the user with basic information
+        password = 'test'  # In production: get_random_string(length=8)
+        user = models.CustomUser.objects.create_user(
+            email=email,
+            password=password,
+            is_active=False,
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+        )
+        
+        # Add user group
+        groups = request.data.get('groups', [])
+        user_group = Group.objects.get(name=groups[0])  # Access the first group in the list
+        user.groups.add(user_group)
+        
+        # Create activation token and URL
+        access_token = AccessToken.for_user(user)
+        create_password_url = f"http://localhost:8080/activate/{access_token}/"
+        
+        # For development: print the link
+        print(f"Confirmation link for {email}: {create_password_url}")
+        
+        # For production: send email (commented out)
+        # send_mail(
+        #     subject="Account Activation",
+        #     message=f"Click the link below to activate your account:\n{create_password_url}",
+        #     from_email="omarderwy@gmail.com",
+        #     recipient_list=[email],
+        # )
+        
+        # Serialize and return the created user
+        serializer = self.get_serializer(user)
+        return Response({
+            'user': serializer.data,
+            'confirmation_link': create_password_url
+        }, status=201)
+            
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
     def user_groups(self, request, *args, **kwargs):
