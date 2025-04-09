@@ -310,37 +310,6 @@ class AttendanceViewSet(viewsets.ViewSet):
             "message": f"Successfully reset check-in status for {count} students."
         })
 
-    @action(detail=False, methods=['POST'], url_path='reset-student', permission_classes=[IsSupervisorOrAboveUser])
-    def reset_student(self, request):
-        """
-        Reset a specific student's check-in status.
-        Requires user_id in the request body.
-        """
-        user_id = request.data.get('user_id')
-        
-        if not user_id:
-            return Response({
-                "error": "Missing required field: user_id"
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            student = Student.objects.get(user_id=user_id)
-            was_checked_in = student.is_checked_in
-            student.is_checked_in = False
-            student.save(update_fields=['is_checked_in'])
-            
-            logger.info(f"Reset check-in status for student {student.user.email} from {was_checked_in} to False")
-            
-            return Response({
-                "status": "success",
-                "message": f"Successfully reset check-in status for student {student.user.email}",
-                "previous_status": was_checked_in,
-                "current_status": student.is_checked_in
-            })
-        except Student.DoesNotExist:
-            return Response({
-                "error": "Student not found"
-            }, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=False, methods=['GET'], url_path='status')
     def is_checked_in(self, request):
@@ -419,7 +388,120 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=False, methods=['POST'], url_path='reset-attendance', permission_classes=[IsSupervisorOrAboveUser])
+    def reset_attendance(self, request):
+        """
+        Reset a specific attendance record by setting check_in_time and check_out_time to null.
+        Requires attendance_record_id in the request body.
+        """
+        attendance_record_id = request.data.get('attendance_record_id')
+        
+        if not attendance_record_id:
+            return Response({
+                "error": "Missing required field: attendance_record_id"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            attendance_record = AttendanceRecord.objects.get(id=attendance_record_id)
+            
+            # Store previous values for logging
+            previous_check_in = attendance_record.check_in_time
+            previous_check_out = attendance_record.check_out_time
+            
+            # Reset check-in and check-out times
+            attendance_record.check_in_time = None
+            attendance_record.check_out_time = None
+            attendance_record.save(update_fields=['check_in_time', 'check_out_time'])
+            
+            # Also reset the student's is_checked_in status if needed
+            student = attendance_record.student
+            if student.is_checked_in:
+                student.is_checked_in = False
+                student.save(update_fields=['is_checked_in'])
+            
+            logger.info(f"Reset attendance record {attendance_record_id} for student {student.user.email}")
+            
+            return Response({
+                "status": "success",
+                "message": f"Successfully reset attendance record for student {student.user.email}",
+                "previous_check_in": previous_check_in,
+                "previous_check_out": previous_check_out,
+                "current_check_in": attendance_record.check_in_time,
+                "current_check_out": attendance_record.check_out_time,
+                "is_checked_in": student.is_checked_in
+            })
+        except AttendanceRecord.DoesNotExist:
+            return Response({
+                "error": f"Attendance record with ID {attendance_record_id} not found"
+            }, status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=False, methods=['POST'], url_path='manual-attend', permission_classes=[IsSupervisorOrAboveUser])
+    def manual_attend(self, request):
+        """
+        Manually record attendance for a student using the first and last session times of their schedule.
+        
+        Request body should contain:
+        - attendance_record_id: ID of the attendance record to update
+        """
+        attendance_record_id = request.data.get('attendance_record_id')
+        
+        if not attendance_record_id:
+            return Response({
+                "error": "Missing required field: attendance_record_id"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get the attendance record
+            attendance_record = AttendanceRecord.objects.get(id=attendance_record_id)
+            schedule = attendance_record.schedule
+            student = attendance_record.student
+            
+            # Get the schedule's sessions, ordered by start_time
+            sessions = schedule.sessions.all().order_by('start_time')
+            
+            if not sessions.exists():
+                return Response({
+                    "error": "No sessions found for this schedule"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get the first and last session times
+            first_session = sessions.first()
+            last_session = sessions.last()
+            check_in_time = first_session.start_time
+            check_out_time = last_session.end_time
+            
+            # Update attendance record
+            attendance_record.check_in_time = check_in_time
+            attendance_record.check_out_time = check_out_time
+            attendance_record.save(update_fields=['check_in_time', 'check_out_time'])
+            
+            # Ensure student is marked as checked out (since we're recording past attendance)
+            if student.is_checked_in:
+                student.is_checked_in = False
+                student.save(update_fields=['is_checked_in'])
+            
+            # Calculate duration
+            
+            logger.info(f"Manually recorded attendance for {student.user.email} on {schedule.name} with check-in: {check_in_time} and check-out: {check_out_time}")
+            
+            return Response({
+                "status": "success",
+                "message": "Attendance successfully recorded",
+                "student": student.user.email,
+                "schedule": schedule.name,
+                "check_in_time": check_in_time,
+                "check_out_time": check_out_time,
+            })
+            
+        except AttendanceRecord.DoesNotExist:
+            return Response({
+                "error": f"Attendance record with ID {attendance_record_id} not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error manually recording attendance: {str(e)}")
+            return Response({
+                "error": f"An error occurred: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
@@ -440,7 +522,7 @@ class AttendanceViewSet(viewsets.ViewSet):
         dlon = lon2_rad - lon1_rad
         
         # Haversine formula
-        a = math.sin(dlat/2)*2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)*2
+        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
         distance = R * c
         

@@ -13,6 +13,7 @@ from .utils import match_lost_and_found_items, send_and_save_notification
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import models  # Add this import for Q objects
+from rest_framework import filters
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -44,6 +45,8 @@ class LostItemViewSet(viewsets.ModelViewSet):
     serializer_class = LostItemSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description', 'place']
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -92,6 +95,8 @@ class FoundItemViewSet(viewsets.ModelViewSet):
     serializer_class = FoundItemSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description', 'place']
 
     def get_queryset(self):
         qs = super().get_queryset()
