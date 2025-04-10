@@ -10,6 +10,7 @@ from core import permissions  # Custom permissions module
 from datetime import timedelta
 from django.db.models import Count  # Import Count for aggregation
 
+# Calender views
 class SessionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing sessions.
@@ -123,7 +124,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 logger.error(f"Error getting or creating schedule: {str(e)}")  # Fixed logging statement
                 raise e
 
-        for session_data in combined_events:  # Fixed loop syntax
+        for session_data in combined_events:  
             if not isinstance(session_data, dict):  # Validate that session_data is a dictionary
                 logger.error(f"Invalid session data format: {session_data}")  # Fixed logging statement
                 return Response({'error': f'Invalid session data format: {session_data}'}, status=400)
@@ -190,16 +191,12 @@ class SessionViewSet(viewsets.ModelViewSet):
                 return Response({'error': f"Error processing session data: {session_data}, Error: {str(e)}"}, status=400)
 
         # Cleanup: Delete attendance records for schedules with no associated sessions
-        # Update the annotation to use the correct related name for sessions
-        empty_schedules = Schedule.objects.annotate(
-            session_count=Count('sessions')  # Replace 'sessions' with the actual related name
-        ).filter(session_count=0)
+        empty_schedules = Schedule.objects.filter(
+            sessions__isnull=True
+        )
         empty_schedules_count = empty_schedules.count()
-        # log the number of empty schedules
-        logger.info(f"Number of empty schedules to delete: {empty_schedules_count}")
-        # Manually delete attendance records for these schedules
-        AttendanceRecord.objects.filter(schedule__in=empty_schedules).delete()
-        # Delete the empty schedules
+
+        # Attendance records will now be deleted automatically due to cascading
         empty_schedules.delete()
 
         # Return a response with the created and updated session IDs
@@ -207,7 +204,7 @@ class SessionViewSet(viewsets.ModelViewSet):
             'message': 'Bulk operation completed successfully.',
             'created_sessions': [session.id for session in created_sessions],
             'updated_sessions': [session.id for session in updated_sessions],
-            'deleted_empty_schedules_count': empty_schedules_count  # Include count of deleted schedules
+            'deleted_empty_schedules_count': empty_schedules_count
         })
 
         
@@ -268,3 +265,24 @@ class SessionViewSet(viewsets.ModelViewSet):
         ]
 
         return Response(result, status=200)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Override destroy to ensure the session is deleted, and if the schedule becomes empty,
+        delete the schedule and its associated attendance records.
+        """
+        instance = self.get_object()
+        schedule = instance.schedule
+
+        # Delete the session
+        instance.delete()
+
+        # Check if the schedule is now empty
+        if not schedule.sessions.exists():
+            # Delete attendance records associated with the schedule
+            schedule.attendance_records.all().delete()
+
+            # Delete the schedule itself
+            schedule.delete()
+
+        return Response({'message': 'Session deleted successfully. Schedule and attendance records deleted if empty.'}, status=204)
