@@ -5,13 +5,13 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/api/v1/attendance/reset-student/
+  url: http://localhost:8000/api/v1/attendance/reset-attendance/
   body: json
   auth: inherit
 }
 
 body:json {
   {
-    "user_id": 34
+    "attendance_record_id": 725
   }
 }

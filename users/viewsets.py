@@ -75,9 +75,9 @@ class UserViewSet(viewsets.ModelViewSet):
     # use this endpoint to add new user (admin/supervisor)
     def create(self, request, *args, **kwargs):
         # Check supervisor permissions
-        # request_user = self.request.user
-        # if not request_user.groups.filter(name='admin').exists():        # .all().values_list('name', flat=True):
-        #     return Response({'error': 'You do not have permission to create users'}, status=403)
+        request_user = self.request.user
+        if not request_user.groups.filter(name='admin').exists():        # .all().values_list('name', flat=True):
+            return Response({'error': 'You do not have permission to create users'}, status=403)
         
         # Extract required data
         email = request.data.get('email')
@@ -121,6 +121,61 @@ class UserViewSet(viewsets.ModelViewSet):
             'user': serializer.data,
             'confirmation_link': create_password_url
         }, status=201)
+        
+    # update user
+    def update(self, request, *args, **kwargs):
+        
+        request_user = self.request.user
+        if not request_user.groups.filter(name='admin').exists():        # .all().values_list('name', flat=True):
+            return Response({'error': 'You do not have permission to update users'}, status=403)
+        
+        user = self.get_object()
+        email = request.data.get('email')
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+        groups = request.data.get('groups', [])
+
+        # Check if email has changed
+        if email and email != user.email:
+            user.email = email
+            user.is_active = False  # Deactivate user until they confirm the new email
+            password = 'test'  # In production: get_random_string(length=8)
+            user.set_password(password)
+
+            # Create activation token and URL
+            access_token = AccessToken.for_user(user)
+            create_password_url = f"http://localhost:8080/activate/{access_token}/"
+
+            # For development: print the link
+            print(f"Confirmation link for {email}: {create_password_url}")
+
+            # For production: send email (commented out)
+            # send_mail(
+            #     subject="Account Activation",
+            #     message=f"Click the link below to activate your account:\n{create_password_url}",
+            #     from_email="omarderwy@gmail.com",
+            #     recipient_list=[email],
+            # )
+
+        # Update first and last name
+        if first_name:
+            user.first_name = first_name
+        if last_name:
+            user.last_name = last_name
+
+        # Update groups if provided
+        if groups:
+            group_ids = getGroupIDFromNames(groups)
+            if isinstance(group_ids, Response):
+                return group_ids
+            user.groups.clear()
+            user.groups.add(*group_ids)
+
+        user.save()
+
+        # Serialize and return the updated user
+        serializer = self.get_serializer(user)
+        return Response(serializer.data)
             
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
@@ -185,7 +240,7 @@ class GroupViewSet(viewsets.ModelViewSet):
     permission_classes = [core_permissions.IsAdminUser]
 
 class ResetPassword(APIView):
-    permission_classes = [core_permissions.IsAdminUser]
+    permission_classes = []
 
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
@@ -199,27 +254,30 @@ class ResetPassword(APIView):
 
         token = AccessToken.for_user(user)
 
-        reset_url = f"{request.build_absolute_uri('/reset-password-confirmation/')}{token}/"
-        send_mail(
-            subject="Password Reset Request",
-            message=f"Click the link below to reset your password:\n{reset_url}",
-            from_email="omarderwy@gmail.com",
-            recipient_list=[email],
-        )
-        return Response({'message': 'Password reset email sent successfully.'})
+        reset_url = f"http://localhost:8080/reset-password/{user.id}/{token}/"
+        # send_mail(
+        #     subject="Password Reset Request",
+        #     message=f"Click the link below to reset your password:\n{reset_url}",
+        #     from_email="omarderwy@gmail.com",
+        #     recipient_list=[email],
+        # )
+        print(f"Password reset link for {email}: {reset_url}")
+        return Response({'message': 'Password reset email sent successfully.',
+                        'reset_url': reset_url})
 
 
 class ResetPasswordConfirmation(APIView):
-    permission_classes = [core_permissions.IsAdminUser]
+    permission_classes = []
 
     def post(self, request, *args, **kwargs):
-        token = kwargs.get('token')
-        new_password = request.data.get('new_password')
+        token = request.data.get('token')
+        new_password = request.data.get('newPassword')
+        userId = request.data.get('userId')
         if not new_password:
             raise ValidationError({'new_password': 'This field is required.'})
 
         try:
-            user = models.CustomUser.objects.get(email=request.data.get('email'))
+            user = models.CustomUser.objects.get(id=userId)
         except models.CustomUser.DoesNotExist:
             raise ValidationError({'email': 'User with this email does not exist.'})
 

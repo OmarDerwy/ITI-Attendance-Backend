@@ -230,19 +230,20 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
         found_item_user = match.found_item.user
         notification_message = (
             f"Congratulations! We found the owner of the item you submitted: '{match.found_item.name}'. "
-            f"The owner's name is {match.lost_item.user}."
+            f"The owner's name is {match.lost_item.user}. (Match ID: {match.match_id})"
         )
         # Use the utility function instead of separate operations
         send_and_save_notification(
             user=found_item_user,
             title="Owner Found!",
-            message=notification_message
+            message=notification_message,
+            match_id=match.match_id  # Pass match_id to the utility function
         )
         return Response({
             "message": "Match status updated to SUCCEEDED and item statuses updated to CONFIRMED.",
             "notification": notification_message,
             "lost_item_status": lost_item.status,
-            "found_item_status": found_item.status
+            "found_item_status": found_item.status,
         })
     
 class NotificationViewSet(viewsets.ModelViewSet):
