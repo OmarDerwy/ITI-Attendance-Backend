@@ -30,12 +30,12 @@ class Command(BaseCommand):
 
         self.stdout.write("Generating schedules...")
         schedules = []
-        for i in range(15):  
+        for i in range(14):  
             track = track1 if i % 2 == 0 else track2
             schedule = Schedule.objects.create(
             track=track,
             name=f"{track.name} Day {i + 1}",
-            created_at=date(2025, 3, 21) + timedelta(days=i),
+            created_at=date(2025, 4, 1) + timedelta(days=i),
             custom_branch=branch,
             is_shared=True)
 
@@ -75,7 +75,19 @@ class Command(BaseCommand):
                 )
                 students.append(student)
             else:
-                students.append(Student.objects.get(email=email))
+                try:
+                    students.append(Student.objects.get(user__email=email))
+                except Student.DoesNotExist:
+                    track = track1 if i < 5 else track2
+                    student = Student.objects.create(
+                        user=User.objects.get(email=email),
+                        track=track,
+                        phone_uuid=None,
+                        laptop_uuid=None,
+                        is_checked_in=bool(i % 2)
+                    )
+                    students.append(student)
+
 
         self.stdout.write("Creating attendance records...")
         for schedule in schedules:

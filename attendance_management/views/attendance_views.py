@@ -473,21 +473,39 @@ class AttendanceViewSet(viewsets.ViewSet):
             tracks = Track.objects.filter(supervisor=supervisor)
 
             total_students = Student.objects.filter(track__in=tracks).count()
-            attended_students = AttendanceRecord.objects.filter(
-                student__track__in=tracks,
-                schedule__created_at__range=(start_date, end_date),
-                check_in_time__isnull=False
-            ).values('student').distinct().count()
+            # Get schedules in the past week
+            schedules = Schedule.objects.filter(
+                track__in=tracks,
+                created_at__range=(start_date, end_date)
+            )
+            num_schedules = schedules.count()
 
-            attendance_percentage = (attended_students / total_students) * 100 if total_students > 0 else 0
+            # Calculate expected attendance records
+            expected_attendance_count = total_students * num_schedules
+
+            # Count actual attendance records with check-ins
+            actual_attendance_count = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                schedule__in=schedules,
+                check_in_time__isnull=False
+            ).count()
+
+            attendance_percentage = (
+                (actual_attendance_count / expected_attendance_count) * 100
+                if expected_attendance_count > 0 else 0
+)
+
 
             return Response({
                 "start_date": start_date,
                 "end_date": end_date,
                 "total_students": total_students,
-                "attended_students": attended_students,
+                "number_of_schedules": num_schedules,
+                "expected_attendance_count": expected_attendance_count,
+                "actual_attendance_count": actual_attendance_count,
                 "attendance_percentage": round(attendance_percentage, 2)
             }, status=status.HTTP_200_OK)
+
 
         except Exception as e:
             return Response({
