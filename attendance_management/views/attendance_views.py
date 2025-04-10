@@ -14,6 +14,10 @@ from ..serializers import AttendanceRecordSerializer
 from django.db.models import Count, Q
 from datetime import timedelta
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
+from collections import OrderedDict
+import calendar
+from rest_framework import status
+
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +245,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                     "error_code": "already_checked_out"
                 }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Get schedule and branch
         schedule = attendance_record.schedule
         branch = schedule.custom_branch
         
@@ -454,7 +457,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+#TODO [AP-75]: fix bug in this function
     @action(detail=False, methods=['GET'], url_path='attendance-percentage/weekly')
     def get_weekly_attendance_percentage(self, request):
         """
@@ -568,6 +571,107 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "weekly_trends": list(weekly_trends),
                 "monthly_trends": list(monthly_trends)
             }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            
+    @action(detail=False, methods=['GET'], url_path='weekly-breakdown')
+    def get_weekly_attendance_by_track(self, request):
+        """
+        Get attendance percentage breakdown for each track from Saturday to Friday.
+        If no track_id is provided, returns data for all tracks managed by the logged-in supervisor.
+        """
+        try:
+            supervisor = request.user
+            track_id = request.query_params.get('track_id')
+
+            # Filter tracks
+            if track_id:
+                tracks = Track.objects.filter(id=track_id, supervisor=supervisor)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "Invalid track ID or you are not the supervisor of this track."
+                    }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                tracks = Track.objects.filter(supervisor=supervisor)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not assigned as a supervisor to any track."
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+            # Week range: Saturday to Friday
+            today = timezone.now().date()
+            weekday = today.weekday()
+            days_since_saturday = (weekday - 5) % 7
+            start_of_week = today - timedelta(days=days_since_saturday)
+            week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
+
+            response_data = OrderedDict()
+
+            for date in week_dates:
+                day_name = calendar.day_name[date.weekday()]
+                daily_data = {}
+                total_expected_records = 0
+                total_actual_records = 0
+
+                for track in tracks:
+                    schedules = Schedule.objects.filter(
+                        track=track,
+                        created_at=date
+                    )
+
+                    if not schedules.exists():
+                        daily_data[track.name] = {
+                            "status": "Free Day"
+                        }
+                        continue
+
+                    total_students = Student.objects.filter(track=track).count()
+                    expected_records = total_students * schedules.count()
+                    actual_records = AttendanceRecord.objects.filter(
+                        student__track=track,
+                        schedule__in=schedules,
+                        check_in_time__isnull=False
+                    ).count()
+
+                    present_percent = (actual_records / expected_records) * 100 if expected_records else 0
+                    absent_percent = 100 - present_percent
+
+                    daily_data[track.name] = {
+                        "expected_attendance_records": expected_records,
+                        "actual_attendance_records": actual_records,
+                        "present_percent": round(present_percent, 2),
+                        "absent_percent": round(absent_percent, 2)
+                    }
+
+                    # Aggregate totals for "All tracks"
+                    total_expected_records += expected_records
+                    total_actual_records += actual_records
+
+                # Calculate the "All tracks" data
+                if total_expected_records > 0:
+                    all_tracks_present_percent = (total_actual_records / total_expected_records) * 100
+                    all_tracks_absent_percent = 100 - all_tracks_present_percent
+                else:
+                    all_tracks_present_percent = 0
+                    all_tracks_absent_percent = 0
+
+                daily_data["All tracks"] = {
+                    "expected_attendance_records": total_expected_records,
+                    "actual_attendance_records": total_actual_records,
+                    "present_percent": round(all_tracks_present_percent, 2),
+                    "absent_percent": round(all_tracks_absent_percent, 2)
+                }
+
+                response_data[day_name] = daily_data
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({
