@@ -59,7 +59,7 @@ class StudentsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'tracks', 'is_active']
+        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'tracks', 'is_active', 'date_joined']
         read_only_fields = ['id', 'email'] # TODO create more specific permissions later
 
     def to_representation(self, instance):
