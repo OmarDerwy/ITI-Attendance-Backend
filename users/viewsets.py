@@ -240,7 +240,7 @@ class GroupViewSet(viewsets.ModelViewSet):
     permission_classes = [core_permissions.IsAdminUser]
 
 class ResetPassword(APIView):
-    permission_classes = [core_permissions.IsAdminUser]
+    permission_classes = []
 
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
@@ -254,27 +254,30 @@ class ResetPassword(APIView):
 
         token = AccessToken.for_user(user)
 
-        reset_url = f"{request.build_absolute_uri('/reset-password-confirmation/')}{token}/"
-        send_mail(
-            subject="Password Reset Request",
-            message=f"Click the link below to reset your password:\n{reset_url}",
-            from_email="omarderwy@gmail.com",
-            recipient_list=[email],
-        )
-        return Response({'message': 'Password reset email sent successfully.'})
+        reset_url = f"http://localhost:8080/reset-password/{user.id}/{token}/"
+        # send_mail(
+        #     subject="Password Reset Request",
+        #     message=f"Click the link below to reset your password:\n{reset_url}",
+        #     from_email="omarderwy@gmail.com",
+        #     recipient_list=[email],
+        # )
+        print(f"Password reset link for {email}: {reset_url}")
+        return Response({'message': 'Password reset email sent successfully.',
+                        'reset_url': reset_url})
 
 
 class ResetPasswordConfirmation(APIView):
-    permission_classes = [core_permissions.IsAdminUser]
+    permission_classes = []
 
     def post(self, request, *args, **kwargs):
-        token = kwargs.get('token')
-        new_password = request.data.get('new_password')
+        token = request.data.get('token')
+        new_password = request.data.get('newPassword')
+        userId = request.data.get('userId')
         if not new_password:
             raise ValidationError({'new_password': 'This field is required.'})
 
         try:
-            user = models.CustomUser.objects.get(email=request.data.get('email'))
+            user = models.CustomUser.objects.get(id=userId)
         except models.CustomUser.DoesNotExist:
             raise ValidationError({'email': 'User with this email does not exist.'})
 
