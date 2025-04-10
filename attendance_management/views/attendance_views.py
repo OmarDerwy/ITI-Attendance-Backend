@@ -60,6 +60,15 @@ class AttendanceViewSet(viewsets.ViewSet):
         # Get student record for this user
         try:
             student = Student.objects.get(user=user)
+
+            # check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
             
             # Check if the student has already checked in
             if student.is_checked_in:
@@ -215,6 +224,15 @@ class AttendanceViewSet(viewsets.ViewSet):
         # Get student record for this user
         try:
             student = Student.objects.get(user=user)
+
+            # check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
             
             # Check if the student is checked in (can't check out if not checked in)
             if not student.is_checked_in:
@@ -546,6 +564,15 @@ class AttendanceViewSet(viewsets.ViewSet):
         try:
             # Get the logged-in user's student profile
             student = Student.objects.get(user=request.user)
+
+            # check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
             
             # Get current date
             today = timezone.now().date()
