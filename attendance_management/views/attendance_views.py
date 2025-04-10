@@ -90,21 +90,46 @@ class AttendanceViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Get latest attendance record for this student - using check_in_time instead of timestamp
-        attendance_record = AttendanceRecord.objects.filter(student=student).order_by('-check_in_time').first()
+        # Get today's date
+        today = timezone.now().date()
         
-        # If no attendance record exists with check_in_time, try to get the latest by ID
-        if not attendance_record:
-            attendance_record = AttendanceRecord.objects.filter(student=student).order_by('-id').first()
+        # Find a schedule for today and get corresponding attendance record
+        try:
+            # Find schedules for the student's track that are for today
+            schedule = Schedule.objects.filter(
+                track=student.track,
+                created_at=today
+            ).first()
             
-        if not attendance_record:
-            return Response(
-                {"error": "No attendance record found for this student."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            if not schedule:
+                return Response({
+                    "status": "error",
+                    "message": "No schedule found for today.",
+                    "error_code": "no_schedule_today"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Find attendance record for this student and schedule
+            attendance_record = AttendanceRecord.objects.filter(
+                student=student,
+                schedule=schedule
+            ).first()
+            
+            if not attendance_record:
+                # Create a new attendance record if one doesn't exist
+                attendance_record = AttendanceRecord.objects.create(
+                    student=student,
+                    schedule=schedule
+                )
+                logger.info(f"Created new attendance record for {student.user.email} for today's schedule")
+        except Exception as e:
+            logger.error(f"Error finding attendance record: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"Error finding attendance record: {str(e)}",
+                "error_code": "attendance_record_error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        # Get schedule and branch
-        schedule = attendance_record.schedule
+        # Get branch for geofence validation
         branch = schedule.custom_branch
         
         # Calculate distance between user and branch coordinates
@@ -137,7 +162,8 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": "Attendance validated successfully",
                 "distance": distance,
                 "geofence_radius": geofence_radius,
-                "check_in_time": attendance_record.check_in_time
+                "check_in_time": attendance_record.check_in_time,
+                "schedule_name": schedule.name
             })
         else:
             # User is outside the geofence
@@ -169,10 +195,9 @@ class AttendanceViewSet(viewsets.ViewSet):
         
         # Validate request data
         if not all([user_id, uuid, latitude, longitude]):
-            return Response(
-                {"error": "Missing required fields. Please provide user_id, uuid, latitude, and longitude."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "error": "Missing required fields. Please provide user_id, uuid, latitude, and longitude."
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             # Convert latitude and longitude to float
@@ -215,31 +240,55 @@ class AttendanceViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Get latest attendance record for this student that has a check-in but no check-out
-        attendance_record = AttendanceRecord.objects.filter(
-            student=student, 
-            check_in_time__isnull=False,
-            check_out_time__isnull=True
-        ).order_by('-check_in_time').first()
+        # Get today's date
+        today = timezone.now().date()
         
-        if not attendance_record:
-            # Try to get the latest attendance record by ID if no appropriate record is found
-            attendance_record = AttendanceRecord.objects.filter(student=student).order_by('-id').first()
+        # Find a schedule for today and get corresponding attendance record
+        try:
+            # Find schedules for the student's track that are for today
+            schedule = Schedule.objects.filter(
+                track=student.track,
+                created_at=today
+            ).first()
+            
+            if not schedule:
+                return Response({
+                    "status": "error",
+                    "message": "No schedule found for today.",
+                    "error_code": "no_schedule_today"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Find attendance record for this student and schedule with check-in
+            attendance_record = AttendanceRecord.objects.filter(
+                student=student,
+                schedule=schedule,
+                check_in_time__isnull=False  # Must have checked in first
+            ).first()
             
             if not attendance_record:
-                return Response(
-                    {"error": "No attendance record found for this student."},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            if student.is_checked_in==False:
+                return Response({
+                    "status": "error",
+                    "message": "No checked-in attendance record found for today.",
+                    "error_code": "no_checkin_record"
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+            # Check if already checked out
+            if attendance_record.check_out_time:
                 return Response({
                     "status": "error",
                     "message": "You have already checked out for this session.",
                     "error_code": "already_checked_out"
                 }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error finding attendance record: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"Error finding attendance record: {str(e)}",
+                "error_code": "attendance_record_error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        # Get schedule and branch
-        schedule = attendance_record.schedule
+        # Get branch for geofence validation
         branch = schedule.custom_branch
         
         # Calculate distance between user and branch coordinates
@@ -256,32 +305,30 @@ class AttendanceViewSet(viewsets.ViewSet):
             
             # Update check_out_time
             attendance_record.check_out_time = current_time
-            attendance_record.save()
+            attendance_record.save(update_fields=['check_out_time'])
             logger.info(f"Check-out time set for student {student.user.email}")
             
             # Explicitly set and save student's check-in status to False
-            Student.objects.filter(id=student.id).update(is_checked_in=False)
-            logger.info(f"Student {student.user.email} marked as checked out using queryset update")
+            student.is_checked_in = False
+            student.save(update_fields=['is_checked_in'])
+            logger.info(f"Student {student.user.email} marked as checked out")
             
             # Calculate duration of attendance
             time_difference = attendance_record.check_out_time - attendance_record.check_in_time
             hours = time_difference.total_seconds() / 3600
             
-            # Refresh student from database to confirm is_checked_in is False
-            student.refresh_from_db()
-            logger.info(f"After checkout, student.is_checked_in = {student.is_checked_in}")
-            
             logger.info(f"Student {student.user.email} successfully checked out at {branch.name}")
             
             return Response({
                 "status": "success",
-                "message": "Check-out successful",
+                "message": "Check-out successful", 
                 "distance": distance,
                 "geofence_radius": geofence_radius,
                 "check_in_time": attendance_record.check_in_time,
                 "check_out_time": attendance_record.check_out_time,
                 "attendance_duration_hours": round(hours, 2),
-                "is_checked_in": student.is_checked_in  # Include in response to confirm status
+                "is_checked_in": False,
+                "schedule_name": schedule.name
             })
         else:
             # User is outside the geofence
@@ -302,14 +349,12 @@ class AttendanceViewSet(viewsets.ViewSet):
         """
         # Reset all students' is_checked_in to False
         count = Student.objects.filter(is_checked_in=True).update(is_checked_in=False)
-        
         logger.info(f"Reset check-in status for {count} students")
         
         return Response({
             "status": "success",
             "message": f"Successfully reset check-in status for {count} students."
         })
-
 
     @action(detail=False, methods=['GET'], url_path='status')
     def is_checked_in(self, request):
@@ -328,9 +373,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": "No student record found for the logged-in user."
             }, status=status.HTTP_404_NOT_FOUND)
-    # add a new endpoint to get multiple attendance records by schedule
-
-    from django.utils import timezone
 
     @action(detail=False, methods=['GET'], url_path='supervisor-attendance')
     def get_supervisor_attendance(self, request):
@@ -340,7 +382,6 @@ class AttendanceViewSet(viewsets.ViewSet):
         """
         try:
             supervisor = request.user
-
             if not Track.objects.filter(supervisor=supervisor).exists():
                 return Response({
                     "status": "error",
@@ -361,7 +402,6 @@ class AttendanceViewSet(viewsets.ViewSet):
 
             track_id = request.query_params.get('track_id')
             tracks = Track.objects.filter(supervisor=supervisor)
-
             if track_id:
                 tracks = tracks.filter(id=track_id)
                 if not tracks.exists():
@@ -374,14 +414,12 @@ class AttendanceViewSet(viewsets.ViewSet):
                 student__track__in=tracks,
                 schedule__created_at=date 
             )
-
             serializer = AttendanceRecordSerializer(attendance_records, many=True)
 
             return Response({
                 "status": "success",
                 "data": serializer.data
             }, status=status.HTTP_200_OK)
-
         except Exception as e:
             return Response({
                 "status": "error",
@@ -439,7 +477,6 @@ class AttendanceViewSet(viewsets.ViewSet):
     def manual_attend(self, request):
         """
         Manually record attendance for a student using the first and last session times of their schedule.
-        
         Request body should contain:
         - attendance_record_id: ID of the attendance record to update
         """
@@ -480,8 +517,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                 student.is_checked_in = False
                 student.save(update_fields=['is_checked_in'])
             
-            # Calculate duration
-            
             logger.info(f"Manually recorded attendance for {student.user.email} on {schedule.name} with check-in: {check_in_time} and check-out: {check_out_time}")
             
             return Response({
@@ -492,7 +527,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "check_in_time": check_in_time,
                 "check_out_time": check_out_time,
             })
-            
         except AttendanceRecord.DoesNotExist:
             return Response({
                 "error": f"Attendance record with ID {attendance_record_id} not found"
@@ -522,7 +556,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 schedule__created_at__gte=today,
                 check_in_time__isnull=True,  # Ensure check-in time is not set
             ).order_by('schedule__created_at')
-
+            
             student_permission_request = PermissionRequest.objects.filter(student=student)
             if student_permission_request.exists():
                 upcoming_records = upcoming_records.exclude(schedule__id__in=student_permission_request.values_list('schedule__id', flat=True))
