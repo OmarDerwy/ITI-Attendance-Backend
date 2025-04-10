@@ -87,32 +87,24 @@ class MatchedItem(models.Model):
         
         # Only send notification if this is a new instance and similarity score exceeds threshold
         if is_new and self.similarity_score > 60:
-            # Create database notification record
+            # Create notification message
             notification_message = f"Your lost item '{self.lost_item.name}' has been matched with a found item '{self.found_item.name}' with a similarity score of {self.similarity_score:.2f}%."
-            Notification.objects.create(
-                user=self.lost_item.user,
-                message=notification_message,
-                is_read=False
-            )
             
-            # Send real-time WebSocket notification
-            channel_layer = get_channel_layer()
-            group_name = f"user_{self.lost_item.user.id}" if self.lost_item.user.is_authenticated else "anonymous"
-            message = {
-                "type": "send_notification",
-                "message": {
-                    "title": "Item Matched!",
-                    "body": notification_message
-                }
-            }
-            logger.info(f"Sending notification to group: {group_name} with message: {message}")
-            async_to_sync(channel_layer.group_send)(group_name, message)
+            # Use the utility function to send and save notification
+            from .utils import send_and_save_notification  # Import here to avoid circular imports
+            send_and_save_notification(
+                user=self.lost_item.user,
+                title="Item Matched!",
+                message=notification_message,
+                match_id=self.match_id
+            )
 
 class Notification(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="notifications")
     message = models.TextField()
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    matched_item = models.ForeignKey(MatchedItem, on_delete=models.CASCADE, related_name="notifications", null=True, blank=True)
 
     def __str__(self):
         return f"Notification for {self.user.username}: {self.message}"
