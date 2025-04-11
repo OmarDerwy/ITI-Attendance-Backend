@@ -34,7 +34,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'userId query parameter is required.'}, status=400)
 
         try:
-            student = Student.objects.select_related('track').get(user_id=user_id)  # Fixed to use .get()
+            student = Student.objects.select_related('track', 'track__default_branch').get(user_id=user_id)
         except Student.DoesNotExist:
             raise NotFound({'error': 'No student found for the given userId.'})
 
@@ -48,6 +48,14 @@ class StudentViewSet(viewsets.ModelViewSet):
                 'program_type': student.track.program_type,
                 'intake': student.track.intake,
                 'start_date': student.track.start_date,
+            },
+            'branch': {
+                'id': student.track.default_branch.id,
+                'name': student.track.default_branch.name,
+                'location_url': student.track.default_branch.location_url,
+                'latitude': student.track.default_branch.latitude,
+                'longitude': student.track.default_branch.longitude,
+                'radius': student.track.default_branch.radius,
             },
         }
         return Response(data, status=200)
