@@ -103,7 +103,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                         track_id=track_id,
                         created_at=schedule_date,
                         name=f"Schedule for {schedule_date}",
-                        custom_branch_id=custom_branch_id
+                        custom_branch=custom_branch_id
                     )
 
                     # Add attendance records for all students in the track
