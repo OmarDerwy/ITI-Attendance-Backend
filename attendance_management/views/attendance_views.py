@@ -864,6 +864,48 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=False, methods=['GET'], url_path='student-attendance')
+    def get_student_attendance(self, request):
+        """
+        Get attendance records of the logged-in student for all past days including today.
+        Returns records in descending order (newest first).
+        """
+        try:
+            # Get the logged-in user's student profile
+            student = Student.objects.get(user=request.user)
+
+            # Check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get today's date
+            today = timezone.now().date()
+            
+            # Get today's and all past records
+            attendance_records = AttendanceRecord.objects.filter(
+                student=student,
+                schedule__created_at__lte=today
+            ).order_by('-schedule__created_at')  # Most recent first
+                
+            serializer = AttendanceRecordSerializerForStudents(attendance_records, many=True)
+            
+            # Return simpler response structure
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Student.DoesNotExist:
+            return Response({
+                "error": "No student record found for the logged-in user."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching student attendance records: {str(e)}")
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
         Calculate the distance between two coordinates using the Haversine formula.
