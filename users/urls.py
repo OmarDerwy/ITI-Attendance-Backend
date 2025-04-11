@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework import routers
-from .viewsets import UserViewSet, GroupViewSet, ResetPassword, BulkCreateStudents, UserActivateView, StudentViewSet
+from .viewsets import UserViewSet, GroupViewSet, ResetPassword, BulkCreateStudents, UserActivateView, StudentViewSet, ResetPasswordConfirmation
 # from .views import bulk_create_users
 router = routers.DefaultRouter()
 router.register(r'groups', GroupViewSet, basename='group')
@@ -12,6 +12,7 @@ urlpatterns = [
     path('auth/', include('djoser.urls.jwt'), name='auth-jwt'),
     path('auth/', include('djoser.urls'), name='auth'),
     path ('reset/', ResetPassword.as_view(), name='reset'),
+    path ('reset-confirmation/', ResetPasswordConfirmation.as_view(), name='reset-confirmation'),
     path('bulkcreate/', BulkCreateStudents.as_view(), name='bulk-create-users'),
     path('activate/', UserActivateView.as_view(), name='activate-user'),
 

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest
 from users.models import CustomUser
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -182,42 +182,85 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         """
         Determine the status of the attendance record based on the conditions.
         """
-        if obj.schedule.created_at > datetime.now().date():
+        student = obj.student
+        schedule = obj.schedule
+        today = datetime.now().date()
+        now = datetime.now()
+
+        def has_permission(request_type):
+            return PermissionRequest.objects.filter(
+                student=student,
+                schedule=schedule,
+                request_type=request_type,
+                status='approved'
+            ).first()
+
+        day_excuse = has_permission('day_excuse') #what if he atteneded the class?
+        if day_excuse:
+            return 'excused'
+
+        if schedule.created_at > today:
             return 'pending'
-        # get the permission request for the student and schedule
-        permission_request = PermissionRequest.objects.filter(
-            student=obj.student, 
-            schedule=obj.schedule, 
-            status='approved'
-        ).first()
 
-        adjusted_time = permission_request.adjusted_time if permission_request else None
+        sessions = schedule.sessions.all()
+        first_session = sessions.order_by('start_time').first()
+        last_session = sessions.order_by('-end_time').first()
 
-        # student has not checked in
+        if not first_session or not last_session:
+            return 'no_sessions'
+
+        grace_period = timedelta(minutes=15)
+        check_in_deadline = first_session.start_time + grace_period
+
+        late_permission = has_permission('late_check_in')
+        early_leave_permission = has_permission('early_leave')
+        early_leave_granted = early_leave_permission is not None
+
         if not obj.check_in_time:
-            if obj.excuse == 'none':
-                return 'absent'
-            elif obj.excuse == 'approved':
-                return 'excused'
-            elif obj.excuse == 'pending':
+            has_pending_permission = PermissionRequest.objects.filter(
+                student=student,
+                schedule=schedule,
+                status='pending'
+            ).exists()
+            
+            if has_pending_permission:
                 return 'pending'
-
-        # Student has checked in
-        if adjusted_time:
-            if obj.check_in_time <= adjusted_time:
-                return 'excused'
+            elif late_permission:
+                if now <= late_permission.adjusted_time: #no check-in 
+                    return 'excused_late'
+                else:
+                    return 'absent'
             else:
-                return 'excused but late'
+                return 'absent'
 
-        if obj.late_check_in == 'approved':
-            return 'excused but late'
-        elif obj.late_check_in == 'pending':
-            return 'pending'
-        elif obj.check_in_time > obj.schedule.sessions.first().start_time:
-            return 'late'
+
+        # Check-in time evaluation
+        if late_permission and late_permission.adjusted_time:
+            is_on_time = obj.check_in_time <= late_permission.adjusted_time
+            late_status = 'late-excused'
         else:
-            return 'attended'
+            is_on_time = obj.check_in_time <= check_in_deadline
+            late_status = 'late-check-in'
 
+        # Check-out is required except for day_excuse
+        if not obj.check_out_time:
+            if schedule.created_at == today and now.time() < last_session.end_time.time():
+                return 'check-in' if is_on_time else f"{late_status}_active"
+            else:
+                return 'no-check-out' if is_on_time else f"{late_status}_no-check-out"
+
+        # Check-out time evaluation
+        if early_leave_granted:
+            # If the student has early leave permission, check if the check-out time is before the adjusted time
+            if obj.check_out_time >= late_permission.adjusted_time:
+                return 'check-in_early-excused' if is_on_time else f"{late_status}_early-excused" 
+            return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
+        elif obj.check_out_time < last_session.end_time:
+            return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
+        else:
+            return 'attended' if is_on_time else late_status
+    
+    
     def get_adjusted_time(self, obj): #used by DRF implicitly 
         """
         Calculate the adjusted time based on the permission request.
@@ -247,6 +290,30 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         Get the track name from the student object.
         """
         return obj.student.track.name if obj.student and obj.student.track else None
+    
+    # def to_representation(self, instance):
+    #     data = super().to_representation(instance)
+    #     if self.context.get('view').action == 'retrieve':
+    #         # Include the schedule name in the response
+    #         scheduleData = ScheduleSerializer(instance.schedule).data
+    #         data['schedule'] = scheduleData
+    #     return data
+
+class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
+    schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
+    class Meta:
+        model = AttendanceRecord
+        fields = [
+            'id', 
+            'schedule', 
+            'check_in_time', 
+            'check_out_time',
+            'excuse', 
+            'early_leave', 
+            'late_check_in',
+            'status',
+            'adjusted_time'
+        ]
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field

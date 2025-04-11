@@ -37,7 +37,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         track_id = self.request.query_params.get('track')
         if track_id:
             queryset = queryset.filter(track_id=track_id)
-
+        queryset = queryset.order_by('-created_at')
         return queryset
 
     def list(self, request, *args, **kwargs):

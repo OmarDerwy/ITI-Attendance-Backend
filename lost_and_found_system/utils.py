@@ -111,7 +111,7 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
     logger.info("No match found. Combined similarity score did not exceed the threshold.")
     return None
 
-def send_and_save_notification(user, title, message):
+def send_and_save_notification(user, title, message, match_id=None):
     """
     Utility function to send a WebSocket notification and save it to the database.
     
@@ -119,13 +119,25 @@ def send_and_save_notification(user, title, message):
         user: The user to send the notification to
         title: The notification title
         message: The notification message body
+        match_id: Optional match_id to include in the notification
     """
     # Create database record
-    Notification.objects.create(
-        user=user,
-        message=message,
-        is_read=False
-    )
+    notification_data = {
+        'user': user,
+        'message': message,
+        'is_read': False
+    }
+    
+    # If match_id provided, get the MatchedItem and include it
+    matched_item = None
+    if match_id is not None:
+        try:
+            matched_item = MatchedItem.objects.get(match_id=match_id)
+            notification_data['matched_item'] = matched_item
+        except MatchedItem.DoesNotExist:
+            logger.warning(f"Tried to associate notification with non-existent match_id {match_id}")
+    
+    notification = Notification.objects.create(**notification_data)
     
     # Send real-time WebSocket notification
     channel_layer = get_channel_layer()
@@ -135,11 +147,12 @@ def send_and_save_notification(user, title, message):
         "type": "send_notification",
         "message": {
             "title": title,
-            "body": message
+            "body": message,
+            "matched_item_id": match_id  # Changed from notification_id to matched_item_id
         }
     }
     
     logger.info(f"Sending notification to {user.email}: {title} - {message}")
     async_to_sync(channel_layer.group_send)(group_name, notification_data)
     
-    return True
+    return notification

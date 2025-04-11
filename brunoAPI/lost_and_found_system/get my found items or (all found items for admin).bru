@@ -5,9 +5,13 @@ meta {
 }
 
 get {
-  url: http://0.0.0.0:8000/api/v1/lost-and-found/found-items/
+  url: http://0.0.0.0:8000/api/v1/lost-and-found/found-items/?search=life
   body: json
   auth: inherit
+}
+
+params:query {
+  search: life
 }
 
 body:json {

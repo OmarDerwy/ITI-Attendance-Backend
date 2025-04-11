@@ -1,0 +1,11 @@
+meta {
+  name: update-status
+  type: http
+  seq: 5
+}
+
+post {
+  url: http://127.0.0.1:8000/api/v1/lost-and-found/matched-items/56/update-status/
+  body: none
+  auth: inherit
+}

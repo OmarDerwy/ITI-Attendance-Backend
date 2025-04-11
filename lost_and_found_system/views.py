@@ -13,6 +13,7 @@ from .utils import match_lost_and_found_items, send_and_save_notification
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import models  # Add this import for Q objects
+from rest_framework import filters
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -44,6 +45,8 @@ class LostItemViewSet(viewsets.ModelViewSet):
     serializer_class = LostItemSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description', 'place']
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -92,6 +95,8 @@ class FoundItemViewSet(viewsets.ModelViewSet):
     serializer_class = FoundItemSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description', 'place']
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -225,25 +230,27 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
         found_item_user = match.found_item.user
         notification_message = (
             f"Congratulations! We found the owner of the item you submitted: '{match.found_item.name}'. "
-            f"The owner's name is {match.lost_item.user}."
+            f"The owner's name is {match.lost_item.user}. (Match ID: {match.match_id})"
         )
         # Use the utility function instead of separate operations
         send_and_save_notification(
             user=found_item_user,
             title="Owner Found!",
-            message=notification_message
+            message=notification_message,
+            match_id=match.match_id  # Pass match_id to the utility function
         )
         return Response({
             "message": "Match status updated to SUCCEEDED and item statuses updated to CONFIRMED.",
             "notification": notification_message,
             "lost_item_status": lost_item.status,
-            "found_item_status": found_item.status
+            "found_item_status": found_item.status,
         })
     
 class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
     permission_classes=[IsAuthenticated]
+    pagination_class = None  # Remove pagination for this viewset
 
     def get_queryset(self):
         return super().get_queryset().filter(user=self.request.user)

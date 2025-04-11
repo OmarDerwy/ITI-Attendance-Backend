@@ -8,3 +8,4 @@ class BranchViewSet(viewsets.ModelViewSet):
     queryset = Branch.objects.all()
     serializer_class = BranchSerializer
     permission_classes = [permissions.IsSupervisorOrAboveUser]
+    pagination_class = None 
