@@ -610,22 +610,21 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
-    @action(detail=False, methods=['POST'], url_path='reset-attendance', permission_classes=[IsSupervisorOrAboveUser])
-    def reset_attendance(self, request):
+    @action(detail=True, methods=['PATCH'], url_path='reset-attendance', permission_classes=[IsSupervisorOrAboveUser])
+    def reset_attendance(self, request, pk):
         """
         Reset a specific attendance record by setting check_in_time and check_out_time to null.
         Requires attendance_record_id in the request body.
         """
-        attendance_record_id = request.data.get('attendance_record_id')
+        # attendance_record_id = request.data.get('attendance_record_id')
         
-        if not attendance_record_id:
-            return Response({
-                "error": "Missing required field: attendance_record_id"
-            }, status=status.HTTP_400_BAD_REQUEST)
+        # if not attendance_record_id:
+        #     return Response({
+        #         "error": "Missing required field: attendance_record_id"
+        #     }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            attendance_record = AttendanceRecord.objects.get(id=attendance_record_id)
-            
+            attendance_record = get_object_or_404(AttendanceRecord, id=pk)
             # Store previous values for logging
             previous_check_in = attendance_record.check_in_time
             previous_check_out = attendance_record.check_out_time
@@ -641,7 +640,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 student.is_checked_in = False
                 student.save(update_fields=['is_checked_in'])
             
-            logger.info(f"Reset attendance record {attendance_record_id} for student {student.user.email}")
+            logger.info(f"Reset attendance record {pk} for student {student.user.email}")
             
             return Response({
                 "status": "success",
@@ -654,26 +653,20 @@ class AttendanceViewSet(viewsets.ViewSet):
             })
         except AttendanceRecord.DoesNotExist:
             return Response({
-                "error": f"Attendance record with ID {attendance_record_id} not found"
+                "error": f"Attendance record with ID {pk} not found"
             }, status=status.HTTP_404_NOT_FOUND)
 
-    @action(detail=False, methods=['POST'], url_path='manual-attend', permission_classes=[IsSupervisorOrAboveUser])
-    def manual_attend(self, request):
+    @action(detail=True, methods=['PATCH'], url_path='manual-attend', permission_classes=[IsSupervisorOrAboveUser])
+    def manual_attend(self, request, pk):
         """
         Manually record attendance for a student using the first and last session times of their schedule.
         Request body should contain:
         - attendance_record_id: ID of the attendance record to update
         """
-        attendance_record_id = request.data.get('attendance_record_id')
-        
-        if not attendance_record_id:
-            return Response({
-                "error": "Missing required field: attendance_record_id"
-            }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             # Get the attendance record
-            attendance_record = AttendanceRecord.objects.get(id=attendance_record_id)
+            attendance_record = get_object_or_404(AttendanceRecord, id=pk)
             schedule = attendance_record.schedule
             student = attendance_record.student
             
@@ -713,7 +706,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             })
         except AttendanceRecord.DoesNotExist:
             return Response({
-                "error": f"Attendance record with ID {attendance_record_id} not found"
+                "error": f"Attendance record with ID {pk} not found"
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Error manually recording attendance: {str(e)}")
