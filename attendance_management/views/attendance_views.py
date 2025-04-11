@@ -616,12 +616,6 @@ class AttendanceViewSet(viewsets.ViewSet):
         Reset a specific attendance record by setting check_in_time and check_out_time to null.
         Requires attendance_record_id in the request body.
         """
-        # attendance_record_id = request.data.get('attendance_record_id')
-        
-        # if not attendance_record_id:
-        #     return Response({
-        #         "error": "Missing required field: attendance_record_id"
-        #     }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             attendance_record = get_object_or_404(AttendanceRecord, id=pk)
@@ -633,6 +627,12 @@ class AttendanceViewSet(viewsets.ViewSet):
             attendance_record.check_in_time = None
             attendance_record.check_out_time = None
             attendance_record.save(update_fields=['check_in_time', 'check_out_time'])
+
+            # get permission request if exists
+            permission_request = PermissionRequest.objects.filter(student=attendance_record.student, schedule=attendance_record.schedule).first()
+            if permission_request:
+                permission_request.status = 'rejected'
+                permission_request.save(update_fields=['status'])
             
             # Also reset the student's is_checked_in status if needed
             student = attendance_record.student
@@ -649,7 +649,8 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "previous_check_out": previous_check_out,
                 "current_check_in": attendance_record.check_in_time,
                 "current_check_out": attendance_record.check_out_time,
-                "is_checked_in": student.is_checked_in
+                "is_checked_in": student.is_checked_in,
+                "adjusted_time": None
             })
         except AttendanceRecord.DoesNotExist:
             return Response({
@@ -665,6 +666,7 @@ class AttendanceViewSet(viewsets.ViewSet):
         """
         
         try:
+            payload = {}
             # Get the attendance record
             attendance_record = get_object_or_404(AttendanceRecord, id=pk)
             schedule = attendance_record.schedule
@@ -689,21 +691,28 @@ class AttendanceViewSet(viewsets.ViewSet):
             attendance_record.check_out_time = check_out_time
             attendance_record.save(update_fields=['check_in_time', 'check_out_time'])
             
+            permission_request = PermissionRequest.objects.filter(student=student, schedule=schedule, status='approved').first()
+
+            if permission_request:
+                payload['adjusted_time'] = permission_request.adjusted_time
+
             # Ensure student is marked as checked out (since we're recording past attendance)
             if student.is_checked_in:
                 student.is_checked_in = False
                 student.save(update_fields=['is_checked_in'])
             
             logger.info(f"Manually recorded attendance for {student.user.email} on {schedule.name} with check-in: {check_in_time} and check-out: {check_out_time}")
-            
-            return Response({
+
+            payload = {
                 "status": "success",
                 "message": "Attendance successfully recorded",
                 "student": student.user.email,
                 "schedule": schedule.name,
                 "check_in_time": check_in_time,
-                "check_out_time": check_out_time,
-            })
+                "check_out_time": check_out_time
+            }
+            
+            return Response(payload, status=status.HTTP_200_OK)
         except AttendanceRecord.DoesNotExist:
             return Response({
                 "error": f"Attendance record with ID {pk} not found"
