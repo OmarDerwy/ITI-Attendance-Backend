@@ -149,6 +149,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     adjusted_time = serializers.SerializerMethodField()
     pending_leave_request = serializers.SerializerMethodField()
+    track_name = serializers.SerializerMethodField()  
+
 
     class Meta:
         model = AttendanceRecord
@@ -163,7 +165,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'early_leave', 
             'late_check_in', 
             'status', 
-            'adjusted_time'
+            'adjusted_time',
+            'track_name',
         ]
 
     def get_student(self, obj):
@@ -282,6 +285,11 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             status='pending'
         ).exists()
         return pending_request
+    def get_track_name(self, obj):
+        """
+        Get the track name from the student object.
+        """
+        return obj.student.track.name if obj.student and obj.student.track else None
     
     # def to_representation(self, instance):
     #     data = super().to_representation(instance)

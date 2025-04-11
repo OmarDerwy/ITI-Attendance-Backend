@@ -11,6 +11,13 @@ from django.utils import timezone
 from core.permissions import IsSupervisorOrAboveUser  # Changed from relative to absolute import
 from ..models import PermissionRequest, Track
 from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents
+from django.db.models import Count, Q
+from datetime import timedelta
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
+from collections import OrderedDict
+import calendar
+from rest_framework import status
+
 
 logger = logging.getLogger(__name__)
 
@@ -437,16 +444,172 @@ class AttendanceViewSet(viewsets.ViewSet):
             )
             serializer = AttendanceRecordSerializer(attendance_records, many=True)
 
-            return Response({
-                "status": "success",
-                "data": serializer.data
-            }, status=status.HTTP_200_OK)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+
         except Exception as e:
             return Response({
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=False, methods=['GET'], url_path='attendance-percentage/today')
+    def get_todays_attendance_percentage(self, request):
+        """
+        Get today's attendance percentage for the tracks managed by the logged-in supervisor.
+        """
+        try:
+            supervisor = request.user
+            if not Track.objects.filter(supervisor=supervisor).exists():
+                return Response({
+                    "status": "error",
+                    "message": "You are not assigned as a supervisor to any track."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            date = timezone.now().date()
+            tracks = Track.objects.filter(supervisor=supervisor)
+
+            total_students = Student.objects.filter(track__in=tracks).count()
+            attended_students = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                schedule__created_at=date,
+                check_in_time__isnull=False
+            ).count()
+
+            attendance_percentage = (attended_students / total_students) * 100 if total_students > 0 else 0
+
+            return Response({
+                "date": date,
+                "total_students": total_students,
+                "attended_students": attended_students,
+                "attendance_percentage": round(attendance_percentage, 2)
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#TODO [AP-75]: fix bug in this function
+    @action(detail=False, methods=['GET'], url_path='attendance-percentage/weekly')
+    def get_weekly_attendance_percentage(self, request):
+        """
+        Get weekly attendance percentage for the tracks managed by the logged-in supervisor.
+        """
+        try:
+            supervisor = request.user
+            if not Track.objects.filter(supervisor=supervisor).exists():
+                return Response({
+                    "status": "error",
+                    "message": "You are not assigned as a supervisor to any track."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            end_date = timezone.now().date()
+            start_date = end_date - timedelta(days=7)
+            tracks = Track.objects.filter(supervisor=supervisor)
+
+            total_students = Student.objects.filter(track__in=tracks).count()
+            # Get schedules in the past week
+            schedules = Schedule.objects.filter(
+                track__in=tracks,
+                created_at__range=(start_date, end_date)
+            )
+            num_schedules = schedules.count()
+
+            # Calculate expected attendance records
+            expected_attendance_count = total_students * num_schedules
+
+            # Count actual attendance records with check-ins
+            actual_attendance_count = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                schedule__in=schedules,
+                check_in_time__isnull=False
+            ).count()
+
+            attendance_percentage = (
+                (actual_attendance_count / expected_attendance_count) * 100
+                if expected_attendance_count > 0 else 0
+)
+
+
+            return Response({
+                "start_date": start_date,
+                "end_date": end_date,
+                "total_students": total_students,
+                "number_of_schedules": num_schedules,
+                "expected_attendance_count": expected_attendance_count,
+                "actual_attendance_count": actual_attendance_count,
+                "attendance_percentage": round(attendance_percentage, 2)
+            }, status=status.HTTP_200_OK)
+
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'], url_path='attendance-trends')
+    def get_attendance_trends(self, request):
+        """
+        Get attendance trends (daily, weekly, and monthly) for the tracks managed by the logged-in supervisor.
+        Optionally filter by a specific track using the 'track_id' query parameter.
+        """
+        try:
+            supervisor = request.user
+            if not Track.objects.filter(supervisor=supervisor).exists():
+                return Response({
+                    "status": "error",
+                    "message": "You are not assigned as a supervisor to any track."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get the track_id from query parameters
+            track_id = request.query_params.get('track_id')
+            tracks = Track.objects.filter(supervisor=supervisor)
+
+            if track_id:
+                tracks = tracks.filter(id=track_id)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "The specified track does not exist or is not managed by you."
+                    }, status=status.HTTP_404_NOT_FOUND)
+
+            # Daily trends
+            daily_trends = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                check_in_time__isnull=False
+            ).annotate(date=TruncDate('schedule__created_at')).values('date').annotate(
+                attended=Count('id')
+            ).order_by('date')
+
+            # Weekly trends
+            weekly_trends = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                check_in_time__isnull=False
+            ).annotate(week=TruncWeek('schedule__created_at')).values('week').annotate(
+                attended=Count('id')
+            ).order_by('week')
+
+            # Monthly trends
+            monthly_trends = AttendanceRecord.objects.filter(
+                student__track__in=tracks,
+                check_in_time__isnull=False
+            ).annotate(month=TruncMonth('schedule__created_at')).values('month').annotate(
+                attended=Count('id')
+            ).order_by('month')
+
+            return Response({
+                "daily_trends": list(daily_trends),
+                "weekly_trends": list(weekly_trends),
+                "monthly_trends": list(monthly_trends)
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
     @action(detail=False, methods=['POST'], url_path='reset-attendance', permission_classes=[IsSupervisorOrAboveUser])
     def reset_attendance(self, request):
         """
@@ -607,6 +770,105 @@ class AttendanceViewSet(viewsets.ViewSet):
             return Response({
                 "status": "error",
                 "message": f"An error occurred: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)            
+    @action(detail=False, methods=['GET'], url_path='weekly-breakdown')
+    def get_weekly_attendance_by_track(self, request):
+        """
+        Get attendance percentage breakdown for each track from Saturday to Friday.
+        If no track_id is provided, returns data for all tracks managed by the logged-in supervisor.
+        """
+        try:
+            supervisor = request.user
+            track_id = request.query_params.get('track_id')
+
+            # Filter tracks
+            if track_id:
+                tracks = Track.objects.filter(id=track_id, supervisor=supervisor)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "Invalid track ID or you are not the supervisor of this track."
+                    }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                tracks = Track.objects.filter(supervisor=supervisor)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not assigned as a supervisor to any track."
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+            # Week range: Saturday to Friday
+            today = timezone.now().date()
+            weekday = today.weekday()
+            days_since_saturday = (weekday - 5) % 7
+            start_of_week = today - timedelta(days=days_since_saturday)
+            week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
+
+            response_data = OrderedDict()
+
+            for date in week_dates:
+                day_name = calendar.day_name[date.weekday()]
+                daily_data = {}
+                total_expected_records = 0
+                total_actual_records = 0
+
+                for track in tracks:
+                    schedules = Schedule.objects.filter(
+                        track=track,
+                        created_at=date
+                    )
+
+                    if not schedules.exists():
+                        daily_data[track.name] = {
+                            "status": "Free Day"
+                        }
+                        continue
+
+                    total_students = Student.objects.filter(track=track).count()
+                    expected_records = total_students * schedules.count()
+                    actual_records = AttendanceRecord.objects.filter(
+                        student__track=track,
+                        schedule__in=schedules,
+                        check_in_time__isnull=False
+                    ).count()
+
+                    present_percent = (actual_records / expected_records) * 100 if expected_records else 0
+                    absent_percent = 100 - present_percent
+
+                    daily_data[track.name] = {
+                        "expected_attendance_records": expected_records,
+                        "actual_attendance_records": actual_records,
+                        "present_percent": round(present_percent, 2),
+                        "absent_percent": round(absent_percent, 2)
+                    }
+
+                    # Aggregate totals for "All tracks"
+                    total_expected_records += expected_records
+                    total_actual_records += actual_records
+
+                # Calculate the "All tracks" data
+                if total_expected_records > 0:
+                    all_tracks_present_percent = (total_actual_records / total_expected_records) * 100
+                    all_tracks_absent_percent = 100 - all_tracks_present_percent
+                else:
+                    all_tracks_present_percent = 0
+                    all_tracks_absent_percent = 0
+
+                daily_data["All tracks"] = {
+                    "expected_attendance_records": total_expected_records,
+                    "actual_attendance_records": total_actual_records,
+                    "present_percent": round(all_tracks_present_percent, 2),
+                    "absent_percent": round(all_tracks_absent_percent, 2)
+                }
+
+                response_data[day_name] = daily_data
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):

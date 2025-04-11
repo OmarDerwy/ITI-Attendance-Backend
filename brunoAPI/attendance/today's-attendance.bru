@@ -1,0 +1,11 @@
+meta {
+  name: today's-attendance
+  type: http
+  seq: 11
+}
+
+get {
+  url: http://localhost:8000/api/v1/attendance/attendance-percentage/today
+  body: none
+  auth: inherit
+}
