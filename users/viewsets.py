@@ -382,6 +382,23 @@ class StudentViewSet(viewsets.ModelViewSet):
             'user': serializer.data,
             'confirmation_link': create_password_url
         }, status=201)
+    @action(detail=True, methods=['get'], url_path='make-inactive')
+    def make_inactive(self, request, *args, **kwargs):
+        student = self.get_object()
+        student.is_active = False
+        student.save()
+        return Response({'message': 'Student has been made inactive successfully.'})
+    
+    @action(detail=True, methods=['get'], url_path='resend-activation')
+    def resend_activation(self, request, *args, **kwargs):
+        student = self.get_object()
+        access_token = AccessToken.for_user(student)
+        create_password_url = f"http://localhost:8080/activate/{access_token}/"
+        # For development: print the link
+        print(f"Confirmation link for {student.email}: {create_password_url}")
+        return Response({
+            'confirmation_link': create_password_url
+        })
 
 class BulkCreateStudents(APIView):
     permission_classes = [core_permissions.IsSupervisorOrAboveUser]

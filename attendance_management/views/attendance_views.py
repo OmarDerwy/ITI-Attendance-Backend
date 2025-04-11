@@ -60,15 +60,17 @@ class AttendanceViewSet(viewsets.ViewSet):
         # Get student record for this user
         try:
             student = Student.objects.get(user=user)
-            
-            # Check if the student has already checked in
-            if student.is_checked_in:
-                logger.warning(f"Student {student.user.email} attempted to check in again while already checked in")
+
+            # check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
                 return Response({
                     "status": "error",
-                    "message": "You have already checked in.",
-                    "error_code": "already_checked_in"
-                }, status=status.HTTP_400_BAD_REQUEST)
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+
             
             # Check if the student has a UUID
             if student.phone_uuid and student.phone_uuid != uuid:
@@ -128,6 +130,16 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": f"Error finding attendance record: {str(e)}",
                 "error_code": "attendance_record_error"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Check if the student has already checked in
+        if attendance_record.check_in_time:
+            logger.warning(f"Student {student.user.email} have already checked in for today's session")
+            return Response({
+                "status": "error",
+                "message": "You have already checked in for today's session.",
+                "error_code": "already_checked_in"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         
         # Get branch for geofence validation
         branch = schedule.custom_branch
@@ -215,6 +227,15 @@ class AttendanceViewSet(viewsets.ViewSet):
         # Get student record for this user
         try:
             student = Student.objects.get(user=user)
+
+            # check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
             
             # Check if the student is checked in (can't check out if not checked in)
             if not student.is_checked_in:
@@ -262,7 +283,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             attendance_record = AttendanceRecord.objects.filter(
                 student=student,
                 schedule=schedule,
-                check_in_time__isnull=False  # Must have checked in first
+                # check_in_time__isnull=False  # Must have checked in first
             ).first()
             
             if not attendance_record:
@@ -546,6 +567,15 @@ class AttendanceViewSet(viewsets.ViewSet):
         try:
             # Get the logged-in user's student profile
             student = Student.objects.get(user=request.user)
+
+            # check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
             
             # Get current date
             today = timezone.now().date()

@@ -107,7 +107,10 @@ class SessionViewSet(viewsets.ModelViewSet):
                     )
 
                     # Add attendance records for all students in the track
-                    students = Student.objects.filter(track_id=track_id)
+                    students = Student.objects.filter(
+                        track_id=track_id,
+                        user__is_active=True  # Ensure the student is active
+                        )
                     attendance_records = [
                         AttendanceRecord(
                             student=student,
