@@ -192,7 +192,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
                 status='approved'
             ).first()
 
-        day_excuse = has_permission('day_excuse') #what if he atteneded the class
+        day_excuse = has_permission('day_excuse') #what if he atteneded the class?
         if day_excuse:
             return 'excused'
 
@@ -234,7 +234,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         # Check-in time evaluation
         if late_permission and late_permission.adjusted_time:
             is_on_time = obj.check_in_time <= late_permission.adjusted_time
-            late_status = 'late-e'
+            late_status = 'late-excused'
         else:
             is_on_time = obj.check_in_time <= check_in_deadline
             late_status = 'late-check-in'
