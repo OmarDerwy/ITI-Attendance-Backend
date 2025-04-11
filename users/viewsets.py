@@ -14,6 +14,9 @@ from rest_framework_simplejwt.tokens import AccessToken
 from django.db.models import Q
 # import from attendance_management
 from attendance_management import models as attend_models
+import os
+import dotenv
+dotenv.load_dotenv()
 
 
 
@@ -108,12 +111,12 @@ class UserViewSet(viewsets.ModelViewSet):
         print(f"Confirmation link for {email}: {create_password_url}")
         
         # For production: send email (commented out)
-        # send_mail(
-        #     subject="Account Activation",
-        #     message=f"Click the link below to activate your account:\n{create_password_url}",
-        #     from_email="omarderwy@gmail.com",
-        #     recipient_list=[email],
-        # )
+        send_mail(
+            subject="Account Activation",
+            message=f"Click the link below to activate your account:\n{create_password_url}",
+            from_email=os.getenv('EMAIL_USER'),
+            recipient_list=["eng.hussein.saad1@gmail.com"],
+        )
         
         # Serialize and return the created user
         serializer = self.get_serializer(user)
@@ -150,12 +153,12 @@ class UserViewSet(viewsets.ModelViewSet):
             print(f"Confirmation link for {email}: {create_password_url}")
 
             # For production: send email (commented out)
-            # send_mail(
-            #     subject="Account Activation",
-            #     message=f"Click the link below to activate your account:\n{create_password_url}",
-            #     from_email="omarderwy@gmail.com",
-            #     recipient_list=[email],
-            # )
+            send_mail(
+            subject="Account Activation",
+            message=f"Click the link below to activate your account:\n{create_password_url}",
+            from_email=os.getenv('EMAIL_USER'),
+            recipient_list=["eng.hussein.saad1@gmail.com"],
+        )
 
         # Update first and last name
         if first_name:
@@ -255,12 +258,12 @@ class ResetPassword(APIView):
         token = AccessToken.for_user(user)
 
         reset_url = f"http://localhost:8080/reset-password/{user.id}/{token}/"
-        # send_mail(
-        #     subject="Password Reset Request",
-        #     message=f"Click the link below to reset your password:\n{reset_url}",
-        #     from_email="omarderwy@gmail.com",
-        #     recipient_list=[email],
-        # )
+        send_mail(
+            subject="Account Activation",
+            message=f"Click the link below to activate your account:\n{reset_url}",
+            from_email=os.getenv('EMAIL_USER'),
+            recipient_list=["eng.hussein.saad1@gmail.com"],
+        )
         print(f"Password reset link for {email}: {reset_url}")
         return Response({'message': 'Password reset email sent successfully.',
                         'reset_url': reset_url})
@@ -369,12 +372,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         print(f"Confirmation link for {email}: {create_password_url}")
         
         # For production: send email (commented out)
-        # send_mail(
-        #     subject="Account Activation",
-        #     message=f"Click the link below to activate your account:\n{create_password_url}",
-        #     from_email="omarderwy@gmail.com",
-        #     recipient_list=[email],
-        # )
+        send_mail(
+            subject="Account Activation",
+            message=f"Click the link below to activate your account:\n{create_password_url}",
+            from_email=os.getenv('EMAIL_USER'),
+            recipient_list=["eng.hussein.saad1@gmail.com"],
+        )
         
         # Serialize and return the created user
         serializer = self.get_serializer(user)
@@ -396,6 +399,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         create_password_url = f"http://localhost:8080/activate/{access_token}/"
         # For development: print the link
         print(f"Confirmation link for {student.email}: {create_password_url}")
+        send_mail(
+            subject="Account Activation",
+            message=f"Click the link below to activate your account:\n{create_password_url}",
+            from_email=os.getenv('EMAIL_USER'),
+            recipient_list=["eng.hussein.saad1@gmail.com"],
+        )
         return Response({
             'confirmation_link': create_password_url
         })
@@ -462,12 +471,12 @@ class BulkCreateStudents(APIView):
             self.confirmation_links[email] = create_password_url
             
             # uncomment this in production
-            # send_mail(
-            #     subject="Password Reset Request",
-            #     message=f"Click the link below to activate your account:\n{create_password_url}",
-            #     from_email="omarderwy@gmail.com",
-            #     recipient_list=[email],
-            # )
+            send_mail(
+                subject="Account Activation",
+                message=f"Click the link below to activate your account:\n{create_password_url}",
+                from_email=os.getenv('EMAIL_USER'),
+                recipient_list=["eng.hussein.saad1@gmail.com"],
+            )
 
 
         return Response({'message': 'Bulk user creation successful!', 'confirmation_links': self.confirmation_links})
