@@ -9,14 +9,15 @@ from django.shortcuts import get_object_or_404
 from users.models import CustomUser
 from django.utils import timezone
 from core.permissions import IsSupervisorOrAboveUser  # Changed from relative to absolute import
-from ..models import PermissionRequest, Track
+from ..models import PermissionRequest, Track, Session
 from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents
-from django.db.models import Count, Q
-from datetime import timedelta
+from django.db.models import Count, Q, Prefetch
+from datetime import timedelta, date, datetime
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from collections import OrderedDict
 import calendar
 from rest_framework import status
+from rest_framework.views import APIView
 
 
 logger = logging.getLogger(__name__)
@@ -870,6 +871,115 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'], url_path='recent-absences')
+    def recent_absences(self, request, *args, **kwargs):
+        """
+        Get recent absences with optional track filtering.
+        Query Parameters:
+            track_id (optional): Filter results for a specific track
+        """
+        user = request.user
+        today = timezone.now().date()
+        two_days_ago = today - timedelta(days=2)
+
+        # Get track_id from query parameters
+        track_id = request.query_params.get('track_id')
+
+        if hasattr(user, 'is_superuser') and user.is_superuser:
+            tracks_qs = Track.objects.all()
+        else:
+            tracks_qs = Track.objects.filter(supervisor=user)
+            if not tracks_qs.exists():
+                return Response({"detail": "You are not assigned to any tracks."}, 
+                              status=status.HTTP_403_FORBIDDEN)
+
+        if track_id:
+            tracks_qs = tracks_qs.filter(id=track_id)
+            if not tracks_qs.exists():
+                return Response(
+                    {"detail": "Track not found or you don't have permission to view it."}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        attendance_records = AttendanceRecord.objects.filter(
+            schedule__created_at__gte=two_days_ago,
+            schedule__created_at__lte=today,
+            schedule__track__in=tracks_qs
+        ).select_related(
+            'student__user',
+            'student__track',
+            'schedule'
+        ).prefetch_related(
+            Prefetch(
+                'schedule__sessions',
+                queryset=Session.objects.order_by('start_time'),
+                to_attr='ordered_sessions'
+            ),
+            Prefetch(
+                'student__permission_requests',
+                queryset=PermissionRequest.objects.filter(
+                    Q(schedule__created_at__gte=two_days_ago,
+                      schedule__created_at__lte=today) |
+                    Q(request_type='day_excuse'),
+                    status__in=['approved', 'pending']
+                ).select_related('schedule'),
+                to_attr='relevant_permissions'
+            )
+        ).order_by('-schedule__created_at', 'student__track__name')
+
+        serializer_instance = AttendanceRecordSerializer()
+        response_data = []
+        processed_entries = set()
+
+        for record in attendance_records:
+            entry_key = (record.student_id, record.schedule.created_at)
+            if entry_key in processed_entries:
+                continue
+
+            permissions = getattr(record.student, 'relevant_permissions', [])
+            approved_day_excuse = next(
+                (p for p in permissions 
+                 if p.request_type == 'day_excuse' 
+                 and p.status == 'approved' 
+                 and p.schedule_id == record.schedule.id),
+                None
+            )
+
+            try:
+                final_status = serializer_instance.get_status(record)
+            except Exception as e:
+                print(f"Error getting status for student {record.student_id}, schedule {record.schedule_id}: {e}")
+                final_status = "error"
+
+            reason = None
+            if final_status in ['excused', 'excused_late']:
+                permission = approved_day_excuse or next(
+                    (p for p in permissions 
+                     if p.status == 'approved' and p.schedule_id == record.schedule_id),
+                    None
+                )
+                reason = permission.reason if permission else "Approved Excuse (Reason Not Found)"
+
+            reportable_statuses = {
+                'absent', 'excused', 'excused_late', 'no-check-out', 
+                'late-check-in_no-check-out', 'pending'
+            }
+
+            if final_status in reportable_statuses:
+                response_data.append({
+                    "student_name": f"{record.student.user.first_name} {record.student.user.last_name}",
+                    "track_name": record.student.track.name,
+                    "date": record.schedule.created_at,
+                    "status": final_status,
+                    "reason": reason
+                })
+                processed_entries.add(entry_key)
+
+        # Sort the final results
+        response_data.sort(key=lambda x: (x['date'], x['track_name'], x['student_name']), reverse=True)
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
