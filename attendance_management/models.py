@@ -32,7 +32,7 @@ class Track(models.Model):
 class Schedule(models.Model):
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='Schedules')
     name = models.CharField(max_length=255)
-    created_at = models.DateField() 
+    created_at = models.DateField(db_index=True) 
     custom_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='Schedules')
     is_shared = models.BooleanField(default=False)
 
@@ -87,6 +87,13 @@ class AttendanceRecord(models.Model):
     excuse = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='none')
     early_leave = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='none')
     late_check_in = models.CharField(max_length=255, choices=PERMISSION_CHOICES, blank=True, null=True)
+    class Meta:
+        indexes = [
+            models.Index(fields=['check_in_time']),
+            models.Index(fields=['check_out_time']),
+            models.Index(fields=['student']),
+            models.Index(fields=['schedule']),
+        ]
 
     def _str_(self):
         return f"AttendanceRecord(Student: {self.student}, Schedule: {self.schedule})"
