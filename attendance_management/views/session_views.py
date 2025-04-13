@@ -4,7 +4,7 @@ from rest_framework.response import Response  # For returning HTTP responses
 from django.utils.timezone import now  # Utility for working with timezones
 from django.db import transaction  # For managing database transactions
 from django.utils.dateparse import parse_datetime  # For parsing datetime strings
-from ..models import Session, Schedule , Student , AttendanceRecord  # Importing models used in this view
+from ..models import Session, Schedule , Student , AttendanceRecord , Branch 
 from ..serializers import SessionSerializer  # Serializer for the Session model
 from core import permissions  # Custom permissions module
 from datetime import timedelta
@@ -99,11 +99,12 @@ class SessionViewSet(viewsets.ModelViewSet):
                     return schedule, False
                 else:
                     # If not found, create a new schedule
+                    branch = Branch.objects.get(id=custom_branch_id)  # Fetch the Branch object
                     schedule = Schedule.objects.create(
                         track_id=track_id,
                         created_at=schedule_date,
                         name=f"Schedule for {schedule_date}",
-                        custom_branch_id=custom_branch_id
+                        custom_branch=branch
                     )
 
                     # Add attendance records for all students in the track
