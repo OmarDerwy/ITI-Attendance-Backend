@@ -115,7 +115,7 @@ class UserViewSet(viewsets.ModelViewSet):
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
             from_email=os.getenv('EMAIL_USER'),
-            recipient_list=["eng.hussein.saad1@gmail.com"],
+            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
         )
         
         # Serialize and return the created user
@@ -157,7 +157,7 @@ class UserViewSet(viewsets.ModelViewSet):
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
             from_email=os.getenv('EMAIL_USER'),
-            recipient_list=["eng.hussein.saad1@gmail.com"],
+            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
         )
 
         # Update first and last name
@@ -262,7 +262,7 @@ class ResetPassword(APIView):
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{reset_url}",
             from_email=os.getenv('EMAIL_USER'),
-            recipient_list=["eng.hussein.saad1@gmail.com"],
+            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
         )
         print(f"Password reset link for {email}: {reset_url}")
         return Response({'message': 'Password reset email sent successfully.',
@@ -376,7 +376,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
             from_email=os.getenv('EMAIL_USER'),
-            recipient_list=["eng.hussein.saad1@gmail.com"],
+            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
         )
         
         # Serialize and return the created user
@@ -403,7 +403,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
             from_email=os.getenv('EMAIL_USER'),
-            recipient_list=["eng.hussein.saad1@gmail.com"],
+            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
         )
         return Response({
             'confirmation_link': create_password_url
@@ -475,7 +475,7 @@ class BulkCreateStudents(APIView):
                 subject="Account Activation",
                 message=f"Click the link below to activate your account:\n{create_password_url}",
                 from_email=os.getenv('EMAIL_USER'),
-                recipient_list=["eng.hussein.saad1@gmail.com"],
+                recipient_list=[os.getenv('RECIPIENT_EMAIL')],
             )
 
 
