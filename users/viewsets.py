@@ -1,3 +1,4 @@
+from datetime import timezone
 from . import models, serializers
 from rest_framework import viewsets, permissions
 from core import permissions as core_permissions
@@ -389,6 +390,11 @@ class StudentViewSet(viewsets.ModelViewSet):
     def make_inactive(self, request, *args, **kwargs):
         student = self.get_object()
         student.is_active = False
+        # delete attendance future records for user if they exist
+        student_profile = student.student_profile
+        upcoming_attendance_records =  student_profile.attendance_records.filter(schedule__created_at__gte=timezone.now())
+        print(f"Deleting {upcoming_attendance_records.count()} attendance records for {student.email}.")
+        upcoming_attendance_records.delete()
         student.save()
         return Response({'message': 'Student has been made inactive successfully.'})
     
@@ -504,4 +510,15 @@ class UserActivateView(APIView):
 
         user.is_active = True
         user.save()
+        if ['student'] in user.groups.all().values_list('name', flat=True):
+            student_profile = attend_models.Student.objects.get(user=user)
+            # check for upcoming schedules and create attendance records for user if they don't exist
+            upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track, start_time__gte=timezone.now())
+            numOfAttenCreated = 0
+            for schedule in upcoming_schedules:
+                record, created = attend_models.AttendanceRecord.objects.get_or_create(student=student_profile, schedule=schedule)
+                if created:
+                    numOfAttenCreated += 1
+            print(f"Created {numOfAttenCreated} attendance records for {user.email}.")
+            return Response({'message': 'User has been activated successfully.', 'attendance_records_created': numOfAttenCreated})
         return Response({'message': 'User has been activated successfully.'})
