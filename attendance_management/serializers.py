@@ -45,7 +45,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
         """
         Calculate the number of students attended the schedule out of total students in the track using the available attendance records.
         """
-        total_students = obj.track.students.count()
+        total_students = obj.attendance_records.count()
         attended_students = AttendanceRecord.objects.filter(schedule=obj, check_in_time__isnull=False).values_list('student', flat=True).distinct().count()
         
         return {
