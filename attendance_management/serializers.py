@@ -161,9 +161,6 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'check_in_time', 
             'check_out_time',
             'leave_request_status', # for checking if this attendance record is pending leave request or not
-            'excuse', 
-            'early_leave', 
-            'late_check_in', 
             'status', 
             'adjusted_time',
             'track_name',

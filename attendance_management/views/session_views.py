@@ -40,30 +40,6 @@ class SessionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(sessions, many=True)  # Serialize the filtered sessions
         return Response(serializer.data)  # Return the serialized data as a response
 
-    @action(detail=True, methods=['post'], url_path='request-excuse')
-    def request_excuse(self, request, pk=None):
-        """
-        Allow students to request an excuse for a session.
-        """
-        attendance_record = self.get_object()  # Get the attendance record for the session
-        excuse_type = request.data.get('excuse', 'none')  # Get the excuse type from the request
-        # Validate the excuse type
-        if excuse_type not in dict(AttendanceRecord.EXCUSE_CHOICES):
-            return Response({'error': 'Invalid excuse type'}, status=400)  # Return error for invalid excuse
-        attendance_record.excuse = excuse_type  # Update the excuse type
-        attendance_record.save()  # Save the updated record
-        return Response({'message': 'Excuse requested successfully', 'excuse': excuse_type})  # Return success message
-
-    @action(detail=True, methods=['post'], url_path='request-early-leave')
-    def request_early_leave(self, request, pk=None):
-        """
-        Allow students to request early leave for a session.
-        """
-        attendance_record = self.get_object()  # Get the attendance record for the session
-        attendance_record.early_leave = 'pending'  # Set the early leave status to pending
-        attendance_record.save()  # Save the updated record
-        return Response({'message': 'Early leave requested successfully', 'status': 'pending'})  # Return success message
-
     @action(detail=False, methods=['post'], url_path='bulk-create-or-update')
     @transaction.atomic  # Ensure all operations in this method are atomic which means they will either all succeed or none will be applied
     def bulk_create_or_update(self, request):

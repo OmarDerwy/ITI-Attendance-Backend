@@ -22,6 +22,5 @@ class StudentAdmin(admin.ModelAdmin):
 
 @admin.register(AttendanceRecord)
 class AttendanceRecordAdmin(admin.ModelAdmin):
-    list_display = ('student', 'schedule', 'check_in_time', 'check_out_time', 'excuse', 'early_leave', 'late_check_in')
-    list_filter = ('schedule', 'excuse', 'early_leave', 'late_check_in')
+    list_display = ('student', 'schedule', 'check_in_time', 'check_out_time')
     search_fields = ('student__user__username', 'schedule__name')
