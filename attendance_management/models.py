@@ -4,7 +4,7 @@ from users.models import CustomUser
 from django.db.models import UniqueConstraint
 
 class Branch(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, unique=True)
     latitude = models.FloatField()
     longitude = models.FloatField()
     location_url = models.URLField(blank=True, null=True)
