@@ -318,7 +318,11 @@ class StudentViewSet(viewsets.ModelViewSet):
         requestUserGroups = requestUser.groups.all()
         allUsers = models.CustomUser.objects.all()
         searchParam = self.request.query_params.get('search', None)
+        trackParam = self.request.query_params.get('track', None) # Use Only if user is a supervisor
         students = allUsers.filter(groups__name='student') # TODO not all students actually possess the student group, need to fix database later
+        if trackParam and trackParam != 'All':
+            track = requestUser.tracks.get(id=trackParam)
+            students = allUsers.filter(student_profile__track=track)
         if searchParam:
             students = students.filter(Q(email__icontains=searchParam) | Q(first_name__icontains=searchParam) | Q(last_name__icontains=searchParam)) # TODO consider adding capability for admins to view all students and add them
         if 'supervisor' in requestUserGroups.values_list('name', flat=True):
