@@ -304,9 +304,6 @@ class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
             'schedule', 
             'check_in_time', 
             'check_out_time',
-            'excuse', 
-            'early_leave', 
-            'late_check_in',
             'status',
             'adjusted_time'
         ]
