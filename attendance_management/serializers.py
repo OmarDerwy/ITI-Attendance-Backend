@@ -226,7 +226,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             if has_pending_permission:
                 return 'pending'
             elif late_permission:
-                if now <= late_permission.adjusted_time: #no check-in 
+                if late_permission.adjusted_time and now <= late_permission.adjusted_time: #no check-in 
                     return 'excused_late'
                 else:
                     return 'absent'
