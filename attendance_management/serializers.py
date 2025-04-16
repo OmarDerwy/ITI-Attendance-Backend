@@ -178,6 +178,27 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         """
         Determine the status of the attendance record based on the conditions.
+        # Possible statuses:
+        # - 'excused': Student has an approved day excuse.
+        # - 'pending': Schedule is in the future OR student has a pending permission request and hasn't checked in.
+        # - 'no_sessions': Schedule has no sessions defined.
+        # - 'excused_late': Student has approved late permission, is within the adjusted time, but hasn't checked in yet.
+        # - 'absent': Student did not check in and is past the deadline or excused late window.
+        # - 'check-in': Student checked in on time, session is ongoing.
+        # - 'late-check-in_active': Student checked in late (no excuse), session is ongoing.
+        # - 'late-excused_active': Student checked in late (with excuse), session is ongoing.
+        # - 'no-check-out': Student checked in on time, but did not check out after the session ended.
+        # - 'late-check-in_no-check-out': Student checked in late (no excuse), did not check out after the session ended.
+        # - 'late-excused_no-check-out': Student checked in late (with excuse), did not check out after the session ended.
+        # - 'attended': Student checked in on time and checked out on time or later.
+        # - 'late-check-in': Student checked in late (no excuse) and checked out on time or later.
+        # - 'late-excused': Student checked in late (with excuse) and checked out on time or later.
+        # - 'check-in_early-check-out': Student checked in on time but checked out early (no excuse).
+        # - 'late-check-in_early-check-out': Student checked in late (no excuse) and checked out early (no excuse).
+        # - 'late-excused_early-check-out': Student checked in late (with excuse) and checked out early (no excuse).
+        # - 'check-in_early-excused': Student checked in on time and checked out early (with excuse).
+        # - 'late-check-in_early-excused': Student checked in late (no excuse) and checked out early (with excuse).
+        # - 'late-excused_early-excused': Student checked in late (with excuse) and checked out early (with excuse).
         """
         student = obj.student
         schedule = obj.schedule
