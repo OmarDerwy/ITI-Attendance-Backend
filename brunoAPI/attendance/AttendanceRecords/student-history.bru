@@ -1,0 +1,40 @@
+meta {
+  name: student-history
+  type: http
+  seq: 6
+}
+
+get {
+  url: http://localhost:8000/api/v1/attendance/34/student-history/
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {faker} = require('@faker-js/faker')
+  const generateUsers = () => {
+    return new Promise((resolve) => {
+      let user_list = []
+      for (let i = 0; i < 5; i++) {
+        let user = {}
+        const email = faker.internet.email()
+        const first_name = faker.person.firstName
+        const last_name = faker.person.lastName
+  
+        user = {
+          email,
+          first_name,
+          last_name
+        }
+        user_list.push(user)
+      }
+      resolve(user_list)
+    })
+  }
+  
+  generateUsers().then((user_list) => {
+    req.setBody({
+      users: user_list
+    })
+  })
+}
