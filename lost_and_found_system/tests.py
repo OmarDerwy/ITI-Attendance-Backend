@@ -1,17 +1,19 @@
 from django.test import TestCase
 from django.utils.timezone import now
-from users.models import CustomUser
-from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices
+from django.contrib.auth import get_user_model
+from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices, LostAndFoundItem
 from channels.testing import WebsocketCommunicator
 from asgiref.sync import sync_to_async
 from core.asgi import application
 
+CustomUser = get_user_model()
 
 class LostAndFoundTestCase(TestCase):
     def setUp(self):
         self.user = CustomUser.objects.create_user(
-            email='testuser@example.com',  
-            password='password123'
+            email='test@example.com',
+            password='testpass123',
+            groups=['student']
         )
 
         # Create a lost item

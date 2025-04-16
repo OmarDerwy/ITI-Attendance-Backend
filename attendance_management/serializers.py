@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest
 from users.models import CustomUser
 from datetime import datetime, timedelta
+from .settings_models import ApplicationSetting
 
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -150,153 +151,70 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     adjusted_time = serializers.SerializerMethodField()
     leave_request_status = serializers.SerializerMethodField()
     track_name = serializers.SerializerMethodField()  
-
+    warning_status = serializers.SerializerMethodField()
 
     class Meta:
         model = AttendanceRecord
         fields = [
-            'id', 
-            'student', 
-            'schedule', 
-            'check_in_time', 
+            'id',
+            'student',
+            'schedule',
+            'check_in_time',
             'check_out_time',
-            'leave_request_status', # for checking if this attendance record is pending leave request or not
-            'excuse', 
-            'early_leave', 
-            'late_check_in', 
-            'status', 
+            'status',
             'adjusted_time',
+            'leave_request_status',
             'track_name',
+            'warning_status'
         ]
 
     def get_student(self, obj):
-        """
-        Return first_name and last_name from the CustomUser model via Student.user.
-        """
         return {
-            "first_name": obj.student.user.first_name,
-            "last_name": obj.student.user.last_name
+            'id': obj.student.id,
+            'name': f"{obj.student.user.first_name} {obj.student.user.last_name}",
+            'email': obj.student.user.email
         }
 
     def get_status(self, obj):
-        """
-        Determine the status of the attendance record based on the conditions.
-        """
-        student = obj.student
-        schedule = obj.schedule
-        today = datetime.now().date()
-        now = datetime.now()
-
-        def has_permission(request_type):
-            return PermissionRequest.objects.filter(
-                student=student,
-                schedule=schedule,
-                request_type=request_type,
-                status='approved'
-            ).first()
-
-        day_excuse = has_permission('day_excuse') #what if he atteneded the class?
-        if day_excuse:
-            return 'excused'
-
-        if schedule.created_at > today:
-            return 'pending'
-
-        sessions = schedule.sessions.all()
-        first_session = sessions.order_by('start_time').first()
-        last_session = sessions.order_by('-end_time').first()
-
-        if not first_session or not last_session:
-            return 'no_sessions'
-
-        grace_period = timedelta(minutes=15)
-        check_in_deadline = first_session.start_time + grace_period
-
-        late_permission = has_permission('late_check_in')
-        early_leave_permission = has_permission('early_leave')
-        early_leave_granted = early_leave_permission is not None
-
-        if not obj.check_in_time:
-            has_pending_permission = PermissionRequest.objects.filter(
-                student=student,
-                schedule=schedule,
-                status='pending'
-            ).exists()
-            
-            if has_pending_permission:
-                return 'pending'
-            elif late_permission:
-                if late_permission.adjusted_time and now <= late_permission.adjusted_time: #no check-in 
-                    return 'excused_late'
-                else:
-                    return 'absent'
-            else:
-                return 'absent'
-
-
-        # Check-in time evaluation
-        if late_permission and late_permission.adjusted_time:
-            is_on_time = obj.check_in_time <= late_permission.adjusted_time
-            late_status = 'late-excused'
-        else:
-            is_on_time = obj.check_in_time <= check_in_deadline
-            late_status = 'late-check-in'
-
-        # Check-out is required except for day_excuse
-        if not obj.check_out_time:
-            if schedule.created_at == today and now.time() < last_session.end_time.time():
-                return 'check-in' if is_on_time else f"{late_status}_active"
-            else:
-                return 'no-check-out' if is_on_time else f"{late_status}_no-check-out"
-
-        # Check-out time evaluation
-        if early_leave_granted:
-            # If the student has early leave permission, check if the check-out time is before the adjusted time
-            if obj.check_out_time >= late_permission.adjusted_time:
-                return 'check-in_early-excused' if is_on_time else f"{late_status}_early-excused" 
-            return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
-        elif obj.check_out_time < last_session.end_time:
-            return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
-        else:
-            return 'attended' if is_on_time else late_status
-    
-    
-    def get_adjusted_time(self, obj): #used by DRF implicitly 
-        """
-        Calculate the adjusted time based on the permission request.
-        """
+        # Get permission request for this attendance record
         permission_request = PermissionRequest.objects.filter(
-            student=obj.student, 
-            schedule=obj.schedule, 
+            student=obj.student,
+            schedule=obj.schedule
+        ).first()
+
+        if not obj.check_in_time and not obj.check_out_time:
+            if permission_request and permission_request.status == 'approved':
+                return 'excused'
+            return 'absent'
+        elif obj.check_in_time and not obj.check_out_time:
+            return 'no-check-out'
+        elif obj.check_in_time and obj.check_out_time:
+            return 'present'
+        return 'unknown'
+
+    def get_adjusted_time(self, obj):
+        # Get permission request for this attendance record
+        permission_request = PermissionRequest.objects.filter(
+            student=obj.student,
+            schedule=obj.schedule,
             status='approved'
         ).first()
+        return permission_request.adjusted_time if permission_request else None
 
-        if permission_request:
-            return permission_request.adjusted_time
-
-        return obj.check_in_time
     def get_leave_request_status(self, obj):
-        """
-        Check if there is a pending leave request for the student and schedule.
-        """
-        pending_request = PermissionRequest.objects.filter(
-            student=obj.student, 
-            schedule=obj.schedule, 
+        # Get permission request for this attendance record
+        permission_request = PermissionRequest.objects.filter(
+            student=obj.student,
+            schedule=obj.schedule
         ).first()
-        return pending_request.status if pending_request else None
+        return permission_request.status if permission_request else 'none'
+
     def get_track_name(self, obj):
-        """
-        Get the track name from the student object.
-        """
-        return obj.student.track.name if obj.student and obj.student.track else None
-    
-    # def to_representation(self, instance):
-    #     data = super().to_representation(instance)
-    #     if self.context.get('view').action == 'retrieve':
-    #         # Include the schedule name in the response
-    #         scheduleData = ScheduleSerializer(instance.schedule).data
-    #         data['schedule'] = scheduleData
-    #     return data
+        return obj.student.track.name
+
+    def get_warning_status(self, obj):
+        has_warning, warning_type = obj.student.has_exceeded_warning_threshold()
+        return warning_type if has_warning else None
 
 class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
     schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule

@@ -1,12 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Branch, Track, Schedule, Session,Student, AttendanceRecord, PermissionRequest, Student
+from .models import Branch, Track, Schedule, Session, Student, AttendanceRecord, PermissionRequest, ApplicationSetting
 
 # Register your models here.
 admin.site.register(Branch)
 admin.site.register(Track)
 admin.site.register(Session)
 admin.site.register(PermissionRequest)
+admin.site.register(ApplicationSetting)
 
 @admin.register(Schedule)
 class ScheduleAdmin(admin.ModelAdmin):

@@ -457,7 +457,8 @@ class AttendanceViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['GET'], url_path='attendance-percentage/today')
     def get_todays_attendance_percentage(self, request):
         """
-        Get today's attendance percentage for the tracks managed by the logged-in supervisor.
+        Get today's attendance percentage for the tracks managed by the logged-in supervisor,
+        considering only students who are scheduled for today.
         """
         try:
             supervisor = request.user
@@ -470,12 +471,22 @@ class AttendanceViewSet(viewsets.ViewSet):
             date = timezone.now().date()
             tracks = Track.objects.filter(supervisor=supervisor)
 
-            total_students = Student.objects.filter(track__in=tracks).count()
-            attended_students = AttendanceRecord.objects.filter(
-                student__track__in=tracks,
-                schedule__created_at=date,
-                check_in_time__isnull=False
-            ).count()
+            total_students = 0
+            attended_students = 0
+
+            for track in tracks:
+                schedules = Schedule.objects.filter(track=track, created_at=date)
+                scheduled_students = Student.objects.filter(
+                attendance_records__schedule__in=schedules
+            ).distinct().count()
+                total_students += scheduled_students
+
+                # Count how many of the scheduled students actually attended today
+                attended_students += AttendanceRecord.objects.filter(
+                    student__track=track,
+                    schedule__in=schedules,
+                    check_in_time__isnull=False
+                ).count()
 
             attendance_percentage = (attended_students / total_students) * 100 if total_students > 0 else 0
 
@@ -491,6 +502,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 #TODO [AP-75]: fix bug in this function
     @action(detail=False, methods=['GET'], url_path='attendance-percentage/weekly')
     def get_weekly_attendance_percentage(self, request):
@@ -816,10 +828,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 total_actual_records = 0
 
                 for track in tracks:
-                    schedules = Schedule.objects.filter(
-                        track=track,
-                        created_at=date
-                    )
+                    schedules = Schedule.objects.filter(track=track, created_at=date)
 
                     if not schedules.exists():
                         daily_data[track.name] = {
@@ -827,7 +836,12 @@ class AttendanceViewSet(viewsets.ViewSet):
                         }
                         continue
 
-                    total_students = Student.objects.filter(track=track).count()
+                    # Count only students scheduled today
+                    scheduled_students = Student.objects.filter(
+                        attendance_records__schedule__in=schedules
+                    ).distinct().count()
+                    
+                    total_students = scheduled_students
                     expected_records = total_students * schedules.count()
                     actual_records = AttendanceRecord.objects.filter(
                         student__track=track,
@@ -873,6 +887,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     @action(detail=False, methods=['get'], url_path='recent-absences')
     def recent_absences(self, request, *args, **kwargs):
