@@ -24,6 +24,10 @@ class ScheduleViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         groups = user.groups.values_list('name', flat=True)
+        from_date = self.request.query_params.get('from_date')
+        to_date = self.request.query_params.get('to_date')
+        track_id = self.request.query_params.get('track')
+
         if 'supervisor' in groups:
             tracks = Track.objects.filter(supervisor=user)
             queryset = Schedule.objects.filter(track__in=tracks)
@@ -33,10 +37,15 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             queryset = Schedule.objects.filter(track__students__user=user)
         else:
             queryset = Schedule.objects.none()
-
-        track_id = self.request.query_params.get('track')
+        # query for track_id
         if track_id:
             queryset = queryset.filter(track_id=track_id)
+        # query for date range
+        if from_date and to_date:
+            queryset = queryset.filter(created_at__range=[from_date, to_date])
+        elif from_date:
+            queryset = queryset.filter(created_at=from_date)
+        # order by created_at descending
         queryset = queryset.order_by('-created_at')
         return queryset
 
