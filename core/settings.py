@@ -102,11 +102,11 @@ ASGI_APPLICATION = 'core.asgi.application'
 # DATABASE_ROUTERS = ['core.database_routers.UserDatabaseRouter']
 
 tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
-
+database_name = os.getenv("DATABASE_NAME", "neondb")
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': tmpPostgres.path.replace('/', ''),
+        'NAME': database_name,
         'USER': tmpPostgres.username,
         'PASSWORD': tmpPostgres.password,
         'HOST': tmpPostgres.hostname,

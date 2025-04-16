@@ -994,12 +994,12 @@ class AttendanceViewSet(viewsets.ViewSet):
             student = Student.objects.get(user=request.user)
 
             # Check if student is active
-            if not student.user.is_active:
-                logger.warning(f"Student {student.user.email} is not active")
-                return Response({
-                    "status": "error",
-                    "message": "Your account is not active. Please contact an administrator."
-                }, status=status.HTTP_403_FORBIDDEN)
+            # if not student.user.is_active:
+            #     logger.warning(f"Student {student.user.email} is not active")
+            #     return Response({
+            #         "status": "error",
+            #         "message": "Your account is not active. Please contact an administrator."
+            #     }, status=status.HTTP_403_FORBIDDEN)
 
             # Get today's date
             today = timezone.now().date()
@@ -1109,6 +1109,71 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'], url_path='student-attendance-summary')
+    def get_student_attendance_summary(self, request):
+        """
+        Get a lightweight summary of attendance records for the logged-in student.
+        Only returns date and status for better performance.
+        """
+        try:
+            # Get the logged-in user's student profile
+            student = Student.objects.get(user=request.user)
+            
+            # Get today's date
+            today = timezone.now().date()
+            
+            # Fetch records with all needed related data in optimized queries
+            records = AttendanceRecord.objects.filter(
+                student=student,
+                schedule__created_at__lte=today
+            ).select_related(
+                'student__user',
+                'student__track',
+                'schedule'
+            ).prefetch_related(
+                'schedule__sessions',
+                Prefetch(
+                    'student__permission_requests',
+                    queryset=PermissionRequest.objects.filter(
+                        student=student,
+                        status__in=['approved', 'pending']
+                    ).select_related('schedule'),
+                    to_attr='relevant_permissions'
+                )
+            )
+            
+            # Create an instance of the serializer to use its get_status method
+            serializer_instance = AttendanceRecordSerializer()
+            
+            # Build a lightweight response
+            result = []
+            for record in records:
+                try:
+                    attendance_status = serializer_instance.get_status(record)
+                    result.append({
+                        'date': record.schedule.created_at,
+                        'status': attendance_status,
+                    })
+                except Exception as e:
+                    logger.warning(f"Error calculating status for record {record.id}: {e}")
+                    result.append({
+                        'date': record.schedule.created_at,
+                        'status': 'error_calculating_status',
+                    })
+            
+            # Use explicit integer status code instead of status.HTTP_200_OK
+            return Response(result, status=200)
+
+        except Student.DoesNotExist:
+            return Response({
+                "error": "No student record found for the logged-in user."
+            }, status=404)  # Using explicit status code
+        except Exception as e:
+            logger.error(f"Error fetching student attendance summary: {str(e)}")
+            return Response({
+                "error": str(e)
+            }, status=500)  # Using explicit status code instead of status.HTTP_500_INTERNAL_SERVER_ERROR
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
