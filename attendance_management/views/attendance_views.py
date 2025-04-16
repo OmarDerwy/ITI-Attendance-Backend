@@ -10,7 +10,7 @@ from users.models import CustomUser
 from django.utils import timezone
 from core.permissions import IsSupervisorOrAboveUser  # Changed from relative to absolute import
 from ..models import PermissionRequest, Track, Session
-from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents
+from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents, AttendanceRecordSerializerForSupervisors
 from django.db.models import Count, Q, Prefetch
 from datetime import timedelta, date, datetime
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
@@ -1023,6 +1023,91 @@ class AttendanceViewSet(viewsets.ViewSet):
             logger.error(f"Error fetching student attendance records: {str(e)}")
             return Response({
                 "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    @action(detail=True, methods=['GET'], url_path='student-history', permission_classes=[IsSupervisorOrAboveUser])
+    def get_student_attendance_history(self, request, pk=None):
+        """
+        Get attendance records of a specific student by ID.
+        Only accessible by supervisors who manage the student's track.
+        
+        URL: /api/v1/attendance/{student_id}/student-history/
+        """
+        try:
+            # Get the supervisor (logged-in user)
+            supervisor = request.user
+            
+            # Get the student by ID (from URL parameter)
+            student = get_object_or_404(Student, user_id=pk)
+            
+            # Check if student belongs to a track supervised by this supervisor
+            if student.track.supervisor != supervisor:
+                logger.warning(f"Supervisor {supervisor.email} attempted to access attendance data for student {student.user.email} in unauthorized track")
+                return Response({
+                    "status": "error",
+                    "message": "You are not authorized to view attendance records for this student."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get optional date range from query parameters
+            start_date_str = request.query_params.get('start_date')
+            end_date_str = request.query_params.get('end_date')
+            
+            # Default to all past records if no dates provided
+            query_filters = {
+                'student': student,
+                'schedule__created_at__lte': timezone.now().date()
+            }
+            
+            # Apply date filters if provided - UNTESTED!
+            if start_date_str:
+                try:
+                    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                    query_filters['schedule__created_at__gte'] = start_date
+                except ValueError:
+                    return Response({
+                        "status": "error", 
+                        "message": "Invalid start_date format. Use YYYY-MM-DD."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                    
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                    query_filters['schedule__created_at__lte'] = end_date
+                except ValueError:
+                    return Response({
+                        "status": "error",
+                        "message": "Invalid end_date format. Use YYYY-MM-DD."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get attendance records with optimized queries
+            attendance_records = AttendanceRecord.objects.filter(**query_filters).order_by('-schedule__created_at')  # Most recent first
+                
+            serializer = AttendanceRecordSerializerForSupervisors(attendance_records, many=True)
+            
+            # Include student information in the response
+            response_data = {
+                "student_info": { # extra data yasta law 7d 3ayez ya3ny
+                    "id": student.id,
+                    "name": f"{student.user.first_name} {student.user.last_name}",
+                    "email": student.user.email,
+                    "track": student.track.name,
+                    "is_active": student.user.is_active
+                },
+                "attendance_records": serializer.data,
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Student.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Student not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching student attendance history: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
