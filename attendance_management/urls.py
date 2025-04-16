@@ -16,7 +16,7 @@ router.register(r'students', StudentViewSet, basename='student')
 router.register(r'tracks', TrackViewSet, basename='track')
 router.register(r'branches', BranchViewSet, basename='branch')
 router.register(r'permission-requests', PermissionRequestViewSet, basename='permissionrequest')
-router.register(r'attendance', AttendanceViewSet, basename='attendance')
+router.register(r'', AttendanceViewSet, basename='attendance')  # Register with empty prefixrouter.register(r'attendance', AttendanceViewSet, basename='attendance')
 
 urlpatterns = [
     path('', include(router.urls)),

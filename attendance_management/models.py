@@ -83,10 +83,7 @@ class Student(models.Model):  # Renamed from StudentInfo
         and no approved permission request.
         """
         from .models import PermissionRequest  # Import here to avoid circular import
-        
-        # Get all attendance records with no check-in time
         no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
-        
         # Get all approved day excuse permission requests
         approved_excuses = PermissionRequest.objects.filter(
             student=self,
@@ -94,7 +91,6 @@ class Student(models.Model):  # Renamed from StudentInfo
             status='approved'
         ).values_list('schedule_id', flat=True)
         
-        # Exclude records that have approved excuses
         return no_checkin_records.exclude(schedule_id__in=approved_excuses).count()
     
     def get_excused_absence_count(self):
@@ -104,10 +100,7 @@ class Student(models.Model):  # Renamed from StudentInfo
         and an approved day_excuse permission request.
         """
         from .models import PermissionRequest  # Import here to avoid circular import
-        
-        # Get all attendance records with no check-in time
         no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
-        
         # Get all approved day excuse permission requests
         approved_excuses = PermissionRequest.objects.filter(
             student=self,
@@ -115,7 +108,6 @@ class Student(models.Model):  # Renamed from StudentInfo
             status='approved'
         ).values_list('schedule_id', flat=True)
         
-        # Only include records that have approved excuses
         return no_checkin_records.filter(schedule_id__in=approved_excuses).count()
     
     def has_exceeded_warning_threshold(self):
@@ -123,8 +115,9 @@ class Student(models.Model):  # Renamed from StudentInfo
         Check if the student has exceeded either the excused or unexcused absence threshold.
         Returns a tuple of (has_warning, warning_type) where warning_type is either 'excused' or 'unexcused'.
         """
-        unexcused_threshold = ApplicationSetting.get_unexcused_absence_threshold()
-        excused_threshold = ApplicationSetting.get_excused_absence_threshold()
+        program_type = self.track.program_type
+        unexcused_threshold = ApplicationSetting.get_unexcused_absence_threshold(program_type)
+        excused_threshold = ApplicationSetting.get_excused_absence_threshold(program_type)
         
         unexcused_count = self.get_unexcused_absence_count()
         excused_count = self.get_excused_absence_count()

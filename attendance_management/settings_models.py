@@ -6,8 +6,8 @@ class ApplicationSetting(models.Model):
     This is used for settings that need to be configurable through the UI
     but should persist across deployments.
     """
-    key = models.CharField(max_length=100, unique=True)
-    value = models.JSONField()
+    key = models.CharField(max_length=50, unique=True)
+    value = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -19,19 +19,21 @@ class ApplicationSetting(models.Model):
         return f"{self.key}: {self.value}"
 
     @classmethod
-    def get_unexcused_absence_threshold(cls):
-        """Get the threshold for unexcused absences"""
-        try:
-            setting = cls.objects.get(key='unexcused_absence_threshold')
-            return setting.value
-        except cls.DoesNotExist:
-            return 3  # Default value
+    def get_unexcused_absence_threshold(cls, program_type='nine_months'):
+        """
+        Get the unexcused absence threshold based on program type.
+        Default is for 9-month program.
+        """
+        key = 'unexcused_absence_threshold_intensive' if program_type == 'intensive' else 'unexcused_absence_threshold'
+        setting = cls.objects.filter(key=key).first()
+        return int(setting.value) if setting else 3
 
     @classmethod
-    def get_excused_absence_threshold(cls):
-        """Get the threshold for excused absences"""
-        try:
-            setting = cls.objects.get(key='excused_absence_threshold')
-            return setting.value
-        except cls.DoesNotExist:
-            return 3  # Default value 
+    def get_excused_absence_threshold(cls, program_type='nine_months'):
+        """
+        Get the excused absence threshold based on program type.
+        Default is for 9-month program.
+        """
+        key = 'excused_absence_threshold_intensive' if program_type == 'intensive' else 'excused_absence_threshold'
+        setting = cls.objects.filter(key=key).first()
+        return int(setting.value) if setting else 3 
