@@ -307,6 +307,39 @@ class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
             'status',
             'adjusted_time'
         ]
+class AttendanceRecordSerializerForSupervisors(AttendanceRecordSerializer):
+    sessions = serializers.SerializerMethodField()
+    schedule = serializers.SerializerMethodField()
+    class Meta:
+        model = AttendanceRecord
+        fields = [
+            'id',
+            'schedule',
+            'sessions',
+            'check_in_time', 
+            'check_out_time',
+            'status',
+            'adjusted_time'
+        ]
+    def get_sessions(self, obj):
+        """
+        Return the sessions related to the schedule of the attendance record.
+        """
+        sessions = Session.objects.filter(schedule=obj.schedule).values_list('title', flat=True)
+        return sessions
+    def get_schedule(self, obj):
+        """
+        Return the schedule name related to the attendance record.
+        """
+        return {
+            'id': obj.schedule.id,
+            'name': obj.schedule.name,
+            'created_at': obj.schedule.created_at,
+            'track': {
+                'id': obj.schedule.track.id,
+                'name': obj.schedule.track.name
+            }
+        }
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field
