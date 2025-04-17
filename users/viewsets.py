@@ -44,14 +44,14 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='students')
     def students_list(self, request):
         group = Group.objects.get(name="student")
-        data = self.get_queryset().filter(groups=group)
+        data = self.get_queryset().filter(groups=group,is_active=True)
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'], url_path='instructors')
     def instructors_list(self, request):
         group = Group.objects.get(name="instructor")
-        data = self.get_queryset().filter(groups=group)
+        data = self.get_queryset().filter(groups=group, is_active=True)
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
@@ -396,7 +396,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         student.is_active = False
         # delete attendance future records for user if they exist
         student_profile = student.student_profile
-        upcoming_attendance_records =  student_profile.attendance_records.filter(schedule__created_at__gte=timezone.now())
+        upcoming_attendance_records =  student_profile.attendance_records.filter(schedule__created_at__gte=timezone.localtime())
         print(f"Deleting {upcoming_attendance_records.count()} attendance records for {student.email}.")
         upcoming_attendance_records.delete()
         student.save()
@@ -517,7 +517,7 @@ class UserActivateView(APIView):
         if ['student'] in user.groups.all().values_list('name', flat=True):
             student_profile = attend_models.Student.objects.get(user=user)
             # check for upcoming schedules and create attendance records for user if they don't exist
-            upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track, start_time__gte=timezone.now())
+            upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track, start_time__gte=timezone.localtime())
             numOfAttenCreated = 0
             for schedule in upcoming_schedules:
                 record, created = attend_models.AttendanceRecord.objects.get_or_create(student=student_profile, schedule=schedule)

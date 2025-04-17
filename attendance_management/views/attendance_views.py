@@ -101,7 +101,8 @@ class AttendanceViewSet(viewsets.ViewSet):
             )
         
         # Get today's date
-        today = timezone.now().date()
+        today = timezone.localdate()
+
         
         # Find a schedule for today and get corresponding attendance record
         try:
@@ -162,7 +163,7 @@ class AttendanceViewSet(viewsets.ViewSet):
         # Check if user is within the geofence
         if distance <= geofence_radius:
             # User is within the geofence - update check-in time and mark student as checked in
-            current_time = timezone.now()
+            current_time = timezone.localtime()
             
             # Update check_in_time if not already set
             if not attendance_record.check_in_time:
@@ -270,7 +271,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             )
         
         # Get today's date
-        today = timezone.now().date()
+        today = timezone.localdate()
         
         # Find a schedule for today and get corresponding attendance record
         try:
@@ -330,7 +331,7 @@ class AttendanceViewSet(viewsets.ViewSet):
         # Check if user is within the geofence
         if distance <= geofence_radius:
             # User is within the geofence - set check-out time and update student status
-            current_time = timezone.now()
+            current_time = timezone.localtime()
             
             # Update check_out_time
             attendance_record.check_out_time = current_time
@@ -427,7 +428,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                         "message": "Invalid date format. Please use YYYY-MM-DD."
                     }, status=status.HTTP_400_BAD_REQUEST)
             else:
-                date = timezone.now().date()
+                date = timezone.localdate()
 
             track_id = request.query_params.get('track_id')
             tracks = Track.objects.filter(supervisor=supervisor)
@@ -457,19 +458,31 @@ class AttendanceViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['GET'], url_path='attendance-percentage/today')
     def get_todays_attendance_percentage(self, request):
         """
-        Get today's attendance percentage for the tracks managed by the logged-in supervisor.
+        Get today's attendance percentage.
+        - Supervisors see percentage for tracks they manage.
+        - Admins see percentage for all tracks.
         """
         try:
-            supervisor = request.user
-            if not Track.objects.filter(supervisor=supervisor).exists():
-                return Response({
-                    "status": "error",
-                    "message": "You are not assigned as a supervisor to any track."
-                }, status=status.HTTP_403_FORBIDDEN)
+            user = request.user
+            is_admin = user.is_staff # Check if the user is an admin
 
-            date = timezone.now().date()
-            tracks = Track.objects.filter(supervisor=supervisor)
+            if is_admin:
+                # Admin sees all tracks
+                tracks = Track.objects.all()
+                if not tracks.exists():
+                     return Response({"status": "info", "message": "No tracks found in the system."}, status=status.HTTP_200_OK)
+            else:
+                # Supervisor sees only their tracks
+                tracks = Track.objects.filter(supervisor=user)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not assigned as a supervisor to any track."
+                    }, status=status.HTTP_403_FORBIDDEN)
 
+            date = timezone.localdate()
+
+            # Calculate based on the determined tracks
             total_students = Student.objects.filter(track__in=tracks).count()
             attended_students = AttendanceRecord.objects.filter(
                 student__track__in=tracks,
@@ -487,11 +500,12 @@ class AttendanceViewSet(viewsets.ViewSet):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Error fetching today's attendance percentage: {str(e)}")
             return Response({
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-#TODO [AP-75]: fix bug in this function
+
     @action(detail=False, methods=['GET'], url_path='attendance-percentage/weekly')
     def get_weekly_attendance_percentage(self, request):
         """
@@ -505,7 +519,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                     "message": "You are not assigned as a supervisor to any track."
                 }, status=status.HTTP_403_FORBIDDEN)
 
-            end_date = timezone.now().date()
+            end_date = timezone.localdate()
             start_date = end_date - timedelta(days=7)
             tracks = Track.objects.filter(supervisor=supervisor)
 
@@ -550,67 +564,116 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=False, methods=['GET'], url_path='attendance-trends')
+    @action(detail=False, methods=['GET'], url_path='attendance-trends', permission_classes=[IsSupervisorOrAboveUser])
     def get_attendance_trends(self, request):
         """
-        Get attendance trends (daily, weekly, and monthly) for the tracks managed by the logged-in supervisor.
-        Optionally filter by a specific track using the 'track_id' query parameter.
+        Get attendance trends (daily, weekly, and monthly).
+        - Supervisors see trends for tracks they manage.
+        - Admins see trends for all tracks.
+        Optional filters:
+        - 'track_id': Filter by a specific track.
+        - 'branch_id': Filter by a specific branch.
         """
         try:
-            supervisor = request.user
-            if not Track.objects.filter(supervisor=supervisor).exists():
-                return Response({
-                    "status": "error",
-                    "message": "You are not assigned as a supervisor to any track."
-                }, status=status.HTTP_403_FORBIDDEN)
-
-            # Get the track_id from query parameters
+            user = request.user
+            is_admin = user.is_staff
+            
+            # Get filter parameters
             track_id = request.query_params.get('track_id')
-            tracks = Track.objects.filter(supervisor=supervisor)
+            branch_id = request.query_params.get('branch_id')
 
+            # Base queryset for AttendanceRecord
+            attendance_query = AttendanceRecord.objects.filter(check_in_time__isnull=False)
+
+            # Determine tracks based on user role
+            if is_admin:
+                # Admin sees all tracks unless filtered
+                tracks_query = Track.objects.all()
+            else:
+                # Supervisor sees only their tracks
+                tracks_query = Track.objects.filter(supervisor=user)
+                if not tracks_query.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not assigned as a supervisor to any track."
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+            # Apply track filter if provided
             if track_id:
-                tracks = tracks.filter(id=track_id)
-                if not tracks.exists():
+                try:
+                    # Ensure the track exists and the user has permission (if supervisor)
+                    track = tracks_query.get(id=track_id)
+                    attendance_query = attendance_query.filter(student__track=track)
+                except Track.DoesNotExist:
                     return Response({
                         "status": "error",
                         "message": "The specified track does not exist or is not managed by you."
                     }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # If no specific track, filter by the user's allowed tracks
+                attendance_query = attendance_query.filter(student__track__in=tracks_query)
 
+            # Apply branch filter if provided
+            if branch_id:
+                try:
+                    branch = Branch.objects.get(id=branch_id)
+                    # Filter attendance records based on the schedule's branch
+                    attendance_query = attendance_query.filter(schedule__custom_branch=branch)
+                except Branch.DoesNotExist:
+                    return Response({
+                        "status": "error",
+                        "message": "The specified branch does not exist."
+                    }, status=status.HTTP_404_NOT_FOUND)
+
+            # Calculate trends using the filtered attendance_query
             # Daily trends
-            daily_trends = AttendanceRecord.objects.filter(
-                student__track__in=tracks,
-                check_in_time__isnull=False
-            ).annotate(date=TruncDate('schedule__created_at')).values('date').annotate(
+            daily_trends = attendance_query.annotate(
+                date=TruncDate('schedule__created_at')
+            ).values('date').annotate(
                 attended=Count('id')
             ).order_by('date')
 
             # Weekly trends
-            weekly_trends = AttendanceRecord.objects.filter(
-                student__track__in=tracks,
-                check_in_time__isnull=False
-            ).annotate(week=TruncWeek('schedule__created_at')).values('week').annotate(
+            weekly_trends = attendance_query.annotate(
+                week=TruncWeek('schedule__created_at')
+            ).values('week').annotate(
                 attended=Count('id')
             ).order_by('week')
 
             # Monthly trends
-            monthly_trends = AttendanceRecord.objects.filter(
-                student__track__in=tracks,
-                check_in_time__isnull=False
-            ).annotate(month=TruncMonth('schedule__created_at')).values('month').annotate(
+            monthly_trends = attendance_query.annotate(
+                month=TruncMonth('schedule__created_at')
+            ).values('month').annotate(
                 attended=Count('id')
             ).order_by('month')
-
-            return Response({
+                
+            response_data = {
                 "daily_trends": list(daily_trends),
                 "weekly_trends": list(weekly_trends),
                 "monthly_trends": list(monthly_trends)
-            }, status=status.HTTP_200_OK)
+            }
+
+            # Add filter information to the response
+            filter_info = {}
+            if branch_id:
+                filter_info["branch_id"] = branch_id
+                filter_info["branch_name"] = branch.name # branch object is available if branch_id was valid
+            if track_id:
+                filter_info["track_id"] = track_id
+                filter_info["track_name"] = track.name # track object is available if track_id was valid
+                
+            if filter_info:
+                response_data["filters_applied"] = filter_info
+
+            return Response(response_data, status=status.HTTP_200_OK)
+            
         except Exception as e:
+            logger.error(f"Error fetching attendance trends: {str(e)}")
             return Response({
                 "status": "error",
-                "message": str(e)
+                "message": f"An error occurred: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+
     @action(detail=True, methods=['PATCH'], url_path='reset-attendance', permission_classes=[IsSupervisorOrAboveUser])
     def reset_attendance(self, request, pk):
         """
@@ -744,7 +807,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 }, status=status.HTTP_403_FORBIDDEN)
             
             # Get current date
-            today = timezone.now().date()
+            today = timezone.localdate()
             
             # Fetch attendance records where schedule date is today or in the future
             upcoming_records = AttendanceRecord.objects.filter(
@@ -801,7 +864,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                     }, status=status.HTTP_403_FORBIDDEN)
 
             # Week range: Saturday to Friday
-            today = timezone.now().date()
+            today = timezone.localdate()
             weekday = today.weekday()
             days_since_saturday = (weekday - 5) % 7
             start_of_week = today - timedelta(days=days_since_saturday)
@@ -882,7 +945,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             track_id (optional): Filter results for a specific track
         """
         user = request.user
-        today = timezone.now().date()
+        today = timezone.localdate()
         two_days_ago = today - timedelta(days=2)
 
         # Get track_id from query parameters
@@ -1002,7 +1065,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             #     }, status=status.HTTP_403_FORBIDDEN)
 
             # Get today's date
-            today = timezone.now().date()
+            today = timezone.localdate()
             
             # Get today's and all past records
             attendance_records = AttendanceRecord.objects.filter(
@@ -1174,6 +1237,138 @@ class AttendanceViewSet(viewsets.ViewSet):
             return Response({
                 "error": str(e)
             }, status=500)  # Using explicit status code instead of status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    # @action(detail=False, methods=['GET'], url_path='branch-attendance-trends', permission_classes=[IsSupervisorOrAboveUser])
+    # def get_branch_attendance_trends(self, request):
+    #     """
+    #     Get attendance trends (daily, weekly, and monthly) for all branches.
+    #     Optionally filter by:
+    #     - 'branch_id' query parameter: Data for a specific branch
+    #     - 'track_id' query parameter: Data for a specific track
+    #     Both filters can be used together to get highly specific data.
+    #     """
+    #     try:
+    #         # Get filter parameters from query
+    #         branch_id = request.query_params.get('branch_id')
+    #         track_id = request.query_params.get('track_id')
+            
+    #         # Start with all schedules
+    #         schedules_query = Schedule.objects.all()
+            
+    #         # Filter by branch if branch_id is provided
+    #         if branch_id:
+    #             try:
+    #                 branch = Branch.objects.get(id=branch_id)
+    #                 schedules_query = schedules_query.filter(custom_branch=branch)
+    #             except Branch.DoesNotExist:
+    #                 return Response({
+    #                     "status": "error",
+    #                     "message": "The specified branch does not exist."
+    #                 }, status=status.HTTP_404_NOT_FOUND)
+            
+    #         # Filter by track if track_id is provided
+    #         if track_id:
+    #             try:
+    #                 track = Track.objects.get(id=track_id)
+    #                 schedules_query = schedules_query.filter(track=track)
+    #             except Track.DoesNotExist:
+    #                 return Response({
+    #                     "status": "error",
+    #                     "message": "The specified track does not exist."
+    #                 }, status=status.HTTP_404_NOT_FOUND)
+                
+    #         # Get the filtered schedules
+    #         schedules = schedules_query.all()
+                
+    #         if not schedules.exists():
+    #             return Response({
+    #                 "status": "error",
+    #                 "message": "No schedules found for the selected criteria."
+    #             }, status=status.HTTP_404_NOT_FOUND)
+            
+    #         # Daily trends grouped by branch
+    #         daily_trends = AttendanceRecord.objects.filter(
+    #             schedule__in=schedules,
+    #             check_in_time__isnull=False
+    #         ).annotate(
+    #             date=TruncDate('schedule__created_at')
+    #         ).values(
+    #             'date', 'schedule__custom_branch__name'
+    #         ).annotate(
+    #             attended=Count('id')
+    #         ).order_by('date', 'schedule__custom_branch__name')
+
+    #         # Weekly trends grouped by branch
+    #         weekly_trends = AttendanceRecord.objects.filter(
+    #             schedule__in=schedules,
+    #             check_in_time__isnull=False
+    #         ).annotate(
+    #             week=TruncWeek('schedule__created_at')
+    #         ).values(
+    #             'week', 'schedule__custom_branch__name'
+    #         ).annotate(
+    #             attended=Count('id')
+    #         ).order_by('week', 'schedule__custom_branch__name')
+
+    #         # Monthly trends grouped by branch
+    #         monthly_trends = AttendanceRecord.objects.filter(
+    #             schedule__in=schedules,
+    #             check_in_time__isnull=False
+    #         ).annotate(
+    #             month=TruncMonth('schedule__created_at')
+    #         ).values(
+    #             'month', 'schedule__custom_branch__name'
+    #         ).annotate(
+    #             attended=Count('id')
+    #         ).order_by('month', 'schedule__custom_branch__name')
+
+    #         # Format the response to group by branch
+    #         response_data = {
+    #             "daily_trends": self._format_trends_by_branch(daily_trends, 'date'),
+    #             "weekly_trends": self._format_trends_by_branch(weekly_trends, 'week'),
+    #             "monthly_trends": self._format_trends_by_branch(monthly_trends, 'month')
+    #         }
+
+    #         # Add filter information to the response
+    #         filter_info = {}
+    #         if branch_id:
+    #             filter_info["branch_id"] = branch_id
+    #             filter_info["branch_name"] = branch.name
+    #         if track_id:
+    #             filter_info["track_id"] = track_id
+    #             filter_info["track_name"] = track.name
+                
+    #         if filter_info:
+    #             response_data["filters_applied"] = filter_info
+
+    #         return Response(response_data, status=status.HTTP_200_OK)
+    #     except Exception as e:
+    #         logger.error(f"Error fetching branch attendance trends: {str(e)}")
+    #         return Response({
+    #             "status": "error",
+    #             "message": f"An error occurred: {str(e)}"
+    #         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # def _format_trends_by_branch(self, trends, date_field):
+    #     """
+    #     Helper method to format attendance trends data by branch.
+    #     """
+    #     formatted_trends = {}
+    #     for item in trends:
+    #         date_key = str(item[date_field])
+    #         branch_name = item['schedule__custom_branch__name']
+            
+    #         if date_key not in formatted_trends:
+    #             formatted_trends[date_key] = {}
+            
+    #         formatted_trends[date_key][branch_name] = item['attended']
+            
+    #         # Add a total for each date
+    #         if 'total' not in formatted_trends[date_key]:
+    #             formatted_trends[date_key]['total'] = 0
+    #         formatted_trends[date_key]['total'] += item['attended']
+            
+    #     return formatted_trends
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
