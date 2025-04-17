@@ -1,0 +1,11 @@
+meta {
+  name: student's warnings
+  type: http
+  seq: 4
+}
+
+get {
+  url: http://localhost:8000/api/v1/attendance/students/with-warnings/
+  body: none
+  auth: inherit
+}
