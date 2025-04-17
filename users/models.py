@@ -46,6 +46,14 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
 
     objects = CustomUserManager()  # Use the custom manager
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['first_name', 'last_name'],
+                name='unique_first_last_name'
+            )
+        ]
+
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.email})"
     

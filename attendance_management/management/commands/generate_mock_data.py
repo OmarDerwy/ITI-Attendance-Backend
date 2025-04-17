@@ -97,9 +97,6 @@ class Command(BaseCommand):
                     schedule=schedule,
                     check_in_time=timezone.make_aware(datetime.combine(schedule.created_at, time(10, random.randint(0, 10)))),
                     check_out_time=timezone.make_aware(datetime.combine(schedule.created_at, time(14, random.randint(0, 10)))),
-                    excuse=random.choice(['none', 'approved', 'pending']),
-                    early_leave=random.choice(['none', 'approved', 'pending']),
-                    late_check_in=random.choice(['none', 'approved', 'pending', None])
                 )
 
         self.stdout.write("Creating permission requests...")

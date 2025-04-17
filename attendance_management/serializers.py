@@ -161,7 +161,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'schedule',
             'check_in_time',
             'check_out_time',
-            'status',
+            'leave_request_status', # for checking if this attendance record is pending leave request or not
+            'status', 
             'adjusted_time',
             'leave_request_status',
             'track_name',
@@ -176,11 +177,42 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         }
 
     def get_status(self, obj):
-        # Get permission request for this attendance record
-        permission_request = PermissionRequest.objects.filter(
-            student=obj.student,
-            schedule=obj.schedule
-        ).first()
+        """
+        Determine the status of the attendance record based on the conditions.
+        # Possible statuses:
+        # - 'excused': Student has an approved day excuse.
+        # - 'pending': Schedule is in the future OR student has a pending permission request and hasn't checked in.
+        # - 'no_sessions': Schedule has no sessions defined.
+        # - 'excused_late': Student has approved late permission, is within the adjusted time, but hasn't checked in yet.
+        # - 'absent': Student did not check in and is past the deadline or excused late window.
+        # - 'check-in': Student checked in on time, session is ongoing.
+        # - 'late-check-in_active': Student checked in late (no excuse), session is ongoing.
+        # - 'late-excused_active': Student checked in late (with excuse), session is ongoing.
+        # - 'no-check-out': Student checked in on time, but did not check out after the session ended.
+        # - 'late-check-in_no-check-out': Student checked in late (no excuse), did not check out after the session ended.
+        # - 'late-excused_no-check-out': Student checked in late (with excuse), did not check out after the session ended.
+        # - 'attended': Student checked in on time and checked out on time or later.
+        # - 'late-check-in': Student checked in late (no excuse) and checked out on time or later.
+        # - 'late-excused': Student checked in late (with excuse) and checked out on time or later.
+        # - 'check-in_early-check-out': Student checked in on time but checked out early (no excuse).
+        # - 'late-check-in_early-check-out': Student checked in late (no excuse) and checked out early (no excuse).
+        # - 'late-excused_early-check-out': Student checked in late (with excuse) and checked out early (no excuse).
+        # - 'check-in_early-excused': Student checked in on time and checked out early (with excuse).
+        # - 'late-check-in_early-excused': Student checked in late (no excuse) and checked out early (with excuse).
+        # - 'late-excused_early-excused': Student checked in late (with excuse) and checked out early (with excuse).
+        """
+        student = obj.student
+        schedule = obj.schedule
+        today = datetime.now().date()
+        now = datetime.now()
+
+        def has_permission(request_type):
+            return PermissionRequest.objects.filter(
+                student=student,
+                schedule=schedule,
+                request_type=request_type,
+                status='approved'
+            ).first()
 
         if not obj.check_in_time and not obj.check_out_time:
             if permission_request and permission_request.status == 'approved':
@@ -225,12 +257,42 @@ class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
             'schedule', 
             'check_in_time', 
             'check_out_time',
-            'excuse', 
-            'early_leave', 
-            'late_check_in',
             'status',
             'adjusted_time'
         ]
+class AttendanceRecordSerializerForSupervisors(AttendanceRecordSerializer):
+    sessions = serializers.SerializerMethodField()
+    schedule = serializers.SerializerMethodField()
+    class Meta:
+        model = AttendanceRecord
+        fields = [
+            'id',
+            'schedule',
+            'sessions',
+            'check_in_time', 
+            'check_out_time',
+            'status',
+            'adjusted_time'
+        ]
+    def get_sessions(self, obj):
+        """
+        Return the sessions related to the schedule of the attendance record.
+        """
+        sessions = Session.objects.filter(schedule=obj.schedule).values_list('title', flat=True)
+        return sessions
+    def get_schedule(self, obj):
+        """
+        Return the schedule name related to the attendance record.
+        """
+        return {
+            'id': obj.schedule.id,
+            'name': obj.schedule.name,
+            'created_at': obj.schedule.created_at,
+            'track': {
+                'id': obj.schedule.track.id,
+                'name': obj.schedule.track.name
+            }
+        }
 
 class PermissionRequestSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field

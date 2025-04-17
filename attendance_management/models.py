@@ -7,7 +7,7 @@ from django.conf import settings
 from .settings_models import ApplicationSetting
 
 class Branch(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, unique=True)
     latitude = models.FloatField()
     longitude = models.FloatField()
     location_url = models.URLField(blank=True, null=True)
@@ -140,9 +140,6 @@ class AttendanceRecord(models.Model):
     schedule = models.ForeignKey('Schedule', on_delete=models.CASCADE, related_name='attendance_records')
     check_in_time = models.DateTimeField(blank=True, null=True)
     check_out_time = models.DateTimeField(blank=True, null=True)
-    excuse = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='none')
-    early_leave = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='none')
-    late_check_in = models.CharField(max_length=255, choices=PERMISSION_CHOICES, blank=True, null=True)
     class Meta:
         indexes = [
             models.Index(fields=['check_in_time']),

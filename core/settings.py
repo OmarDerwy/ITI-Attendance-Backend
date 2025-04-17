@@ -102,11 +102,11 @@ ASGI_APPLICATION = 'core.asgi.application'
 # DATABASE_ROUTERS = ['core.database_routers.UserDatabaseRouter']
 
 tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
-
+database_name = os.getenv("DATABASE_NAME", "neondb")
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': tmpPostgres.path.replace('/', ''),
+        'NAME': database_name,
         'USER': tmpPostgres.username,
         'PASSWORD': tmpPostgres.password,
         'HOST': tmpPostgres.hostname,
@@ -151,11 +151,13 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD')
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+USE_TZ = True
+
+TIME_ZONE = 'Africa/Cairo'
 
 USE_I18N = True
 
-USE_TZ = True
+
 
 
 # Static files (CSS, JavaScript, Images)
