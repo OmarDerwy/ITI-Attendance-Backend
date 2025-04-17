@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from ..models import PermissionRequest, Schedule
 from ..serializers import PermissionRequestSerializer
 from core.permissions import IsSupervisorOrAboveUser, IsStudentOrAboveUser
+from rest_framework import status
 
 class PermissionRequestViewSet(viewsets.ModelViewSet):
     """
@@ -92,4 +93,4 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         permission_request = self.get_object()
         permission_request.status = 'rejected'
         permission_request.save()
-        return Response({'message': 'Request rejected successfully'})
+        return Response({'message': 'Request rejected successfully'}, status=status.HTTP_200_OK)

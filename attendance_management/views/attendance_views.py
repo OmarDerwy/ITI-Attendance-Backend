@@ -1081,7 +1081,23 @@ class AttendanceViewSet(viewsets.ViewSet):
             
             # Get attendance records with optimized queries
             attendance_records = AttendanceRecord.objects.filter(**query_filters).order_by('-schedule__created_at')  # Most recent first
-                
+            
+            # Get attendance aggregate for this student
+            user_attendance_records = AttendanceRecord.objects.filter(
+                student=student,
+                schedule__sessions__end_time__lt=timezone.now()
+            ).distinct()  # TODO this code is weird, make sure it works
+            num_of_attendance_records = user_attendance_records.count()
+            num_of_times_attended = user_attendance_records.exclude(check_in_time__isnull=True).count()
+            num_of_times_absent = num_of_attendance_records - num_of_times_attended
+            aggregate_payload = {
+                'num_of_attendance_records': num_of_attendance_records,
+                'num_of_times_attended': num_of_times_attended,
+                'num_of_times_absent': num_of_times_absent,
+                'attendance_percentage': (num_of_times_attended / num_of_attendance_records) * 100 if num_of_attendance_records > 0 else 0,
+            }
+
+
             serializer = AttendanceRecordSerializerForSupervisors(attendance_records, many=True)
             
             # Include student information in the response
@@ -1093,6 +1109,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                     "track": student.track.name,
                     "is_active": student.user.is_active
                 },
+                "attendance_aggregate": aggregate_payload,
                 "attendance_records": serializer.data,
             }
 
