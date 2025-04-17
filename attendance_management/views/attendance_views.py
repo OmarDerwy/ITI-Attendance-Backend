@@ -1118,7 +1118,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Default to all past records if no dates provided
             query_filters = {
                 'student': student,
-                'schedule__created_at__lte': timezone.now().date()
+                'schedule__created_at__lte': timezone.localdate()
             }
             
             # Apply date filters if provided - UNTESTED!
@@ -1148,7 +1148,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Get attendance aggregate for this student
             user_attendance_records = AttendanceRecord.objects.filter(
                 student=student,
-                schedule__sessions__end_time__lt=timezone.now()
+                schedule__sessions__end_time__lt=timezone.localtime()
             ).distinct()  # TODO this code is weird, make sure it works
             num_of_attendance_records = user_attendance_records.count()
             num_of_times_attended = user_attendance_records.exclude(check_in_time__isnull=True).count()
@@ -1201,7 +1201,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             student = Student.objects.get(user=request.user)
             
             # Get today's date
-            today = timezone.now().date()
+            today = timezone.localdate()
             
             # Fetch records with all needed related data in optimized queries
             records = AttendanceRecord.objects.filter(
