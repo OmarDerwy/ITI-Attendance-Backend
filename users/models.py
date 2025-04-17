@@ -3,6 +3,8 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import validate_email
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import Group
+from django.utils.text import slugify
+from rest_framework.exceptions import ValidationError
 # Create your models here.
 
 class CustomUserManager(BaseUserManager):
@@ -41,6 +43,7 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
+    slug_name = models.SlugField(max_length=255, blank=True, null=True, unique=True)
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['groups']  # Remove username from required fields
 
@@ -49,8 +52,8 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['first_name', 'last_name'],
-                name='unique_first_last_name'
+                fields=['slug_name'],
+                name='unique_slug_name'
             )
         ]
 
@@ -61,6 +64,16 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
         self.groups.clear()
         super().delete(using, keep_parents)
         
+    def save(self, *args, **kwargs):
+        self.first_name = self.first_name or ''
+        self.last_name = self.last_name or ''
+        self.slug_name = slugify(f"{self.first_name} {self.last_name}")
+        # check for existing slug_name and if found then return error
+        if CustomUser.objects.filter(slug_name=self.slug_name).exists():
+            user_name = f"{self.first_name} {self.last_name}".strip()
+            raise ValidationError(f"User {self.first_name} {self.last_name} already exists.")
+        super().save(*args, **kwargs)
+
     # def save(self, *args, **kwargs):
     #     super().save(*args, **kwargs)  # Save the user first
     #     if not self.groups.exists():  # If no groups are assigned
