@@ -5,6 +5,7 @@ from ..models import PermissionRequest, Schedule
 from ..serializers import PermissionRequestSerializer
 from core.permissions import IsSupervisorOrAboveUser, IsStudentOrAboveUser
 from lost_and_found_system.utils import send_and_save_notification  # Import the notification function
+from rest_framework import status
 
 class PermissionRequestViewSet(viewsets.ModelViewSet):
     """
@@ -146,4 +147,4 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
             message=notification_message
         )
         
-        return Response({'message': 'Request rejected successfully'})
+        return Response({'message': 'Request rejected successfully'}, status=status.HTTP_200_OK)
