@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from ..models import PermissionRequest, Schedule
 from ..serializers import PermissionRequestSerializer
 from core.permissions import IsSupervisorOrAboveUser, IsStudentOrAboveUser
+from lost_and_found_system.utils import send_and_save_notification  # Import the notification function
+from rest_framework import status
 
 class PermissionRequestViewSet(viewsets.ModelViewSet):
     """
@@ -35,6 +37,23 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
             adjusted_time=adjusted_time,
             reason=reason,
             schedule=schedule,
+        )
+
+        # Send notification to the supervisor of the track
+        supervisor = schedule.track.supervisor
+        student_name = f"{student.user.first_name} {student.user.last_name}"
+        request_type_display = dict(PermissionRequest.REQUEST_TYPES).get(request_type, request_type)
+        
+        notification_message = (
+            f"{student_name} has submitted a new {request_type_display} request for "
+            f"{schedule.name} on {schedule.created_at.strftime('%d %b, %Y')}. "
+            f"Reason: {reason}"
+        )
+        
+        send_and_save_notification(
+            user=supervisor,
+            title="New Permission Request",
+            message=notification_message
         )
 
         permission_request.save()
@@ -77,8 +96,26 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         permission_request.adjusted_time = adjusted_time
         permission_request.status = 'approved'
         permission_request.save()
+        
+        # Send notification to the student that their request was approved
+        student = permission_request.student
+        schedule = permission_request.schedule
+        request_type_display = dict(PermissionRequest.REQUEST_TYPES).get(permission_request.request_type, permission_request.request_type)
+        
+        notification_message = (
+            f"Your {request_type_display} request for {schedule.name} on "
+            f"{schedule.created_at.strftime('%d %b, %Y')} has been approved. "
+            f"Adjusted time: {permission_request.adjusted_time.strftime('%H:%M') if permission_request.adjusted_time else 'N/A'}"
+        )
+        
+        send_and_save_notification(
+            user=student.user,
+            title="Permission Request Approved",
+            message=notification_message
+        )
+        
         return Response({
-            'message': 'Request tested successfully',
+            'message': 'Request approved successfully',
             'object': self.get_serializer(permission_request).data,
             'data': request.data,
         })
@@ -92,4 +129,22 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         permission_request = self.get_object()
         permission_request.status = 'rejected'
         permission_request.save()
-        return Response({'message': 'Request rejected successfully'})
+        
+        # Send notification to the student that their request was rejected
+        student = permission_request.student
+        schedule = permission_request.schedule
+        request_type_display = dict(PermissionRequest.REQUEST_TYPES).get(permission_request.request_type, permission_request.request_type)
+        
+        notification_message = (
+            f"Your {request_type_display} request for {schedule.name} on "
+            f"{schedule.created_at.strftime('%d %b, %Y')} has been rejected. "
+            f"Please contact your supervisor for more information."
+        )
+        
+        send_and_save_notification(
+            user=student.user,
+            title="Permission Request Rejected",
+            message=notification_message
+        )
+        
+        return Response({'message': 'Request rejected successfully'}, status=status.HTTP_200_OK)
