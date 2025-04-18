@@ -819,12 +819,18 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Get current date
             today = timezone.localdate()
             
-            # Fetch attendance records where schedule date is today or in the future
+            ##### PAST FUNCTIONALITY #####
+            # # Fetch attendance records where schedule date is today or in the future
+            # upcoming_records = AttendanceRecord.objects.filter(
+            #     student=student,
+            #     schedule__created_at__gte=today,
+            #     check_in_time__isnull=True,  # Ensure check-in time is not set
+            # ).order_by('schedule__created_at')
+            ###############################
             upcoming_records = AttendanceRecord.objects.filter(
                 student=student,
-                schedule__created_at__gte=today,
-                check_in_time__isnull=True,  # Ensure check-in time is not set
-            ).order_by('schedule__created_at')
+                schedule__sessions__end_time__gt=timezone.localtime()
+            ).distinct().order_by('schedule__created_at')
             
             student_permission_request = PermissionRequest.objects.filter(student=student)
             if student_permission_request.exists():
