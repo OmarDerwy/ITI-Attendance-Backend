@@ -101,7 +101,6 @@ class Student(models.Model):  # Renamed from StudentInfo
         """
         from .models import PermissionRequest  # Import here to avoid circular import
         no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
-        # Get all approved day excuse permission requests
         approved_excuses = PermissionRequest.objects.filter(
             student=self,
             request_type='day_excuse',
