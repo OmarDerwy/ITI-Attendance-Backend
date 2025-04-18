@@ -2,6 +2,9 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from users.models import CustomUser
 from django.db.models import UniqueConstraint
+from django.core.exceptions import ValidationError
+from django.conf import settings
+from .settings_models import ApplicationSetting
 
 class Branch(models.Model):
     name = models.CharField(max_length=255, unique=True)
@@ -72,6 +75,58 @@ class Student(models.Model):  # Renamed from StudentInfo
 
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name} - {self.track.name}"
+    
+    def get_unexcused_absence_count(self):
+        """
+        Count the number of unexcused absences for this student.
+        An unexcused absence is defined as an attendance record with no check-in time
+        and no approved permission request.
+        """
+        from .models import PermissionRequest  # Import here to avoid circular import
+        no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
+        # Get all approved day excuse permission requests
+        approved_excuses = PermissionRequest.objects.filter(
+            student=self,
+            request_type='day_excuse',
+            status='approved'
+        ).values_list('schedule_id', flat=True)
+        
+        return no_checkin_records.exclude(schedule_id__in=approved_excuses).count()
+    
+    def get_excused_absence_count(self):
+        """
+        Count the number of excused absences for this student.
+        An excused absence is defined as an attendance record with no check-in time
+        and an approved day_excuse permission request.
+        """
+        from .models import PermissionRequest  # Import here to avoid circular import
+        no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
+        approved_excuses = PermissionRequest.objects.filter(
+            student=self,
+            request_type='day_excuse',
+            status='approved'
+        ).values_list('schedule_id', flat=True)
+        
+        return no_checkin_records.filter(schedule_id__in=approved_excuses).count()
+    
+    def has_exceeded_warning_threshold(self):
+        """
+        Check if the student has exceeded either the excused or unexcused absence threshold.
+        Returns a tuple of (has_warning, warning_type) where warning_type is either 'excused' or 'unexcused'.
+        """
+        program_type = self.track.program_type
+        unexcused_threshold = ApplicationSetting.get_unexcused_absence_threshold(program_type)
+        excused_threshold = ApplicationSetting.get_excused_absence_threshold(program_type)
+        
+        unexcused_count = self.get_unexcused_absence_count()
+        excused_count = self.get_excused_absence_count()
+        
+        if unexcused_count >= unexcused_threshold:
+            return True, 'unexcused'
+        elif excused_count >= excused_threshold:
+            return True, 'excused'
+        
+        return False, None
 
 class AttendanceRecord(models.Model):
     PERMISSION_CHOICES = [
@@ -118,4 +173,4 @@ class PermissionRequest(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.student} - {self.request_type} ({self.status})"
+        return f"{self.student} - {self.request_type} ({self.status})" 

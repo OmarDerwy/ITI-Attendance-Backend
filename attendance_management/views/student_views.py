@@ -1,11 +1,14 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from ..models import Student
-from ..serializers import StudentSerializer
+from ..serializers import StudentSerializer, StudentWithWarningSerializer
 from core import permissions
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
+from django.db.models import Prefetch
+from django.db.models import Count, Subquery, OuterRef, Q, IntegerField, Value, Case, When, F
+from ..models import PermissionRequest, ApplicationSetting
 
 class CustomPagination(PageNumberPagination):
     page_size = 10  # 10 students per page
@@ -60,4 +63,48 @@ class StudentViewSet(viewsets.ModelViewSet):
         }
         return Response(data, status=200)
 
+    @action(detail=False, methods=['get'], url_path='with-warnings', permission_classes=[permissions.IsSupervisorOrAboveUser])
+    def students_with_warnings(self, request):
+        """
+        Optimized retrieval of students who exceeded absence thresholds.
+        """
+        thresholds = {
+            'nine_months': {
+                'excused': ApplicationSetting.get_excused_absence_threshold('nine_months'),
+                'unexcused': ApplicationSetting.get_unexcused_absence_threshold('nine_months')
+            },
+            'intensive': {
+                'excused': ApplicationSetting.get_excused_absence_threshold('intensive'),
+                'unexcused': ApplicationSetting.get_unexcused_absence_threshold('intensive')
+            }
+        }
 
+        approved_excuses = PermissionRequest.objects.filter(
+            student=OuterRef('pk'),
+            request_type='day_excuse',
+            status='approved'
+        ).values('schedule_id')
+
+        students = Student.objects.select_related('user', 'track').annotate(
+            unexcused_count=Count('attendance_records', filter=Q(
+                attendance_records__check_in_time__isnull=True
+            ) & ~Q(
+                attendance_records__schedule_id__in=Subquery(approved_excuses)
+            )),
+            excused_count=Count('attendance_records', filter=Q(
+                attendance_records__check_in_time__isnull=True,
+                attendance_records__schedule_id__in=Subquery(approved_excuses)
+            ))
+        )
+
+        students_with_warnings = []
+        for student in students:
+            program_type = student.track.program_type
+            if (
+                student.unexcused_count >= thresholds[program_type]['unexcused'] or
+                student.excused_count >= thresholds[program_type]['excused']
+            ):
+                students_with_warnings.append(student)
+
+        serializer = StudentWithWarningSerializer(students_with_warnings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

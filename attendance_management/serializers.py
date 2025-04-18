@@ -150,6 +150,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     adjusted_time = serializers.SerializerMethodField()
     leave_request_status = serializers.SerializerMethodField()
     track_name = serializers.SerializerMethodField()  
+    warning_status = serializers.SerializerMethodField()  # Added warning_status field
 
 
     class Meta:
@@ -164,6 +165,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'status', 
             'adjusted_time',
             'track_name',
+            'warning_status',  # Added warning_status field
         ]
 
     def get_student(self, obj):
@@ -308,6 +310,14 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         """
         return obj.student.track.name if obj.student and obj.student.track else None
     
+    def get_warning_status(self, obj):
+        """
+        Get the warning status ('excused' or 'unexcused') if a threshold is exceeded.
+        Relies on the optimized Student.has_exceeded_warning_threshold() method.
+        """
+        has_warning, warning_type = obj.student.has_exceeded_warning_threshold()
+        return warning_type if has_warning else None
+    
     # def to_representation(self, instance):
     #     data = super().to_representation(instance)
     #     if self.context.get('view').action == 'retrieve':
@@ -389,3 +399,36 @@ class PermissionRequestSerializer(serializers.ModelSerializer):
             "last_name": obj.student.user.last_name,
             "phone_number": obj.student.user.phone_number,
         }
+
+# Added StudentWithWarningSerializer
+class StudentWithWarningSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    track_name = serializers.CharField(source='track.name', read_only=True)
+    warning_type = serializers.SerializerMethodField()
+    unexcused_absences = serializers.SerializerMethodField()
+    excused_absences = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Student
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'track_name',
+            'warning_type',
+            'unexcused_absences',
+            'excused_absences',
+        ]
+
+    def get_warning_type(self, obj):
+        has_warning, warning_type = obj.has_exceeded_warning_threshold()
+        return warning_type
+
+    def get_unexcused_absences(self, obj):
+        return obj.get_unexcused_absence_count()
+
+    def get_excused_absences(self, obj):
+        return obj.get_excused_absence_count()

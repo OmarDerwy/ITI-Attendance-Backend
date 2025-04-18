@@ -6,7 +6,8 @@ from attendance_management.views.session_views import SessionViewSet
 from attendance_management.views.student_views import StudentViewSet
 from attendance_management.views.track_views import TrackViewSet
 from attendance_management.views.permission_request_views import PermissionRequestViewSet
-from attendance_management.views.attendance_views  import AttendanceViewSet
+from attendance_management.views.attendance_views import AttendanceViewSet
+from attendance_management.views.settings_views import get_absence_thresholds, update_absence_thresholds
 
 router = DefaultRouter()
 router.register(r'schedules', ScheduleViewSet, basename='schedule')
@@ -19,4 +20,6 @@ router.register(r'', AttendanceViewSet, basename='attendance')  # Register with 
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('settings/absence-thresholds/', get_absence_thresholds, name='get-absence-thresholds'),
+    path('settings/absence-thresholds/update/', update_absence_thresholds, name='update-absence-thresholds'),
 ]
