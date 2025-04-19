@@ -3,9 +3,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils.timezone import now
 from rest_framework.pagination import PageNumberPagination
+from django.db.models import Prefetch
 from ..models import Schedule, Track
 from ..serializers import ScheduleSerializer
 from core import permissions
+
 # Add custom pagination class
 class CustomPagination(PageNumberPagination):
     def get_paginated_response(self, data):
@@ -45,7 +47,16 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(created_at__range=[from_date, to_date])
         elif from_date:
             queryset = queryset.filter(created_at=from_date)
-        # order by created_at descending
+        
+        # Optimize related fetching
+        queryset = queryset.select_related('track')
+        queryset = queryset.prefetch_related(
+            Prefetch('sessions', to_attr='prefetched_sessions'),
+            Prefetch('permission_requests', to_attr='prefetched_permission_requests'),
+            Prefetch('attendance_records', to_attr='prefetched_attendance_records'),
+            Prefetch('track__students', to_attr='prefetched_students'),
+        )
+
         queryset = queryset.order_by('-created_at')
         return queryset
 

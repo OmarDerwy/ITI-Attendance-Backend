@@ -25,13 +25,19 @@ class ScheduleSerializer(serializers.ModelSerializer):
         fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time', 'attended_out_of_total']
 
     def get_start_time(self, obj):
-        """Get the start time from the first session of the day"""
-        first_session = Session.objects.filter(schedule=obj).order_by('start_time').first()
+        """Get the start time from the first session of the day using prefetched data"""
+        sessions = getattr(obj, 'prefetched_sessions', None)
+        if sessions is None:
+            sessions = obj.sessions.all()
+        first_session = min(sessions, key=lambda s: s.start_time, default=None)
         return first_session.start_time if first_session else None
         
     def get_end_time(self, obj):
-        """Get the end time from the last session of the day"""
-        last_session = Session.objects.filter(schedule=obj).order_by('-end_time').first()
+        """Get the end time from the last session of the day using prefetched data"""
+        sessions = getattr(obj, 'prefetched_sessions', None)
+        if sessions is None:
+            sessions = obj.sessions.all()
+        last_session = max(sessions, key=lambda s: s.end_time, default=None)
         return last_session.end_time if last_session else None
 
     def get_fields(self):
@@ -44,10 +50,13 @@ class ScheduleSerializer(serializers.ModelSerializer):
     def get_attended_out_of_total(self, obj):
         """
         Calculate the number of students attended the schedule out of total students in the track using the available attendance records.
+        Uses prefetched attendance_records if available.
         """
-        total_students = obj.attendance_records.count()
-        attended_students = AttendanceRecord.objects.filter(schedule=obj, check_in_time__isnull=False).values_list('student', flat=True).distinct().count()
-        
+        attendance_records = getattr(obj, 'prefetched_attendance_records', None)
+        if attendance_records is None:
+            attendance_records = obj.attendance_records.all()
+        total_students = len(attendance_records)
+        attended_students = len({ar.student_id for ar in attendance_records if ar.check_in_time is not None})
         return {
             "attended": attended_students,
             "total": total_students
@@ -207,52 +216,69 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         today = datetime.now().date()
         now = datetime.now()
 
-        def has_permission(request_type):
-            return PermissionRequest.objects.filter(
-                student=student,
-                schedule=schedule,
-                request_type=request_type,
-                status='approved'
-            ).first()
+        # Prefetched permission requests for this student/schedule
+        permission_requests_map = getattr(self, '_permission_requests_map', None)
+        if permission_requests_map is None:
+            # Build a map: {(schedule_id, student_id): [PermissionRequest, ...]}
+            permission_requests = []
+            # Try to get from context if provided
+            if 'permission_requests' in self.context:
+                permission_requests = self.context['permission_requests']
+            else:
+                permission_requests = PermissionRequest.objects.filter(schedule=schedule, student=student)
+            permission_requests_map = {}
+            for pr in permission_requests:
+                key = (pr.schedule_id, pr.student_id)
+                permission_requests_map.setdefault(key, []).append(pr)
+            self._permission_requests_map = permission_requests_map
 
-        day_excuse = has_permission('day_excuse') #what if he atteneded the class?
+        prs = permission_requests_map.get((schedule.id, student.id), [])
+
+        def get_permission(request_type):
+            for pr in prs:
+                if pr.request_type == request_type and pr.status == 'approved':
+                    return pr
+            return None
+
+        day_excuse = get_permission('day_excuse')
         if day_excuse:
             return 'excused'
 
         if schedule.created_at > today:
             return 'pending'
 
-        sessions = schedule.sessions.all()
-        first_session = sessions.order_by('start_time').first()
-        last_session = sessions.order_by('-end_time').first()
-
+        # Use prefetched sessions if available
+        sessions = getattr(schedule, 'prefetched_sessions', None)
+        if sessions is None:
+            sessions = schedule.sessions.all()
+        sessions = list(sessions)
+        if not sessions:
+            return 'no_sessions'
+        first_session = min(sessions, key=lambda s: s.start_time, default=None)
+        last_session = max(sessions, key=lambda s: s.end_time, default=None)
         if not first_session or not last_session:
             return 'no_sessions'
 
         grace_period = timedelta(minutes=15)
         check_in_deadline = first_session.start_time + grace_period
 
-        late_permission = has_permission('late_check_in')
-        early_leave_permission = has_permission('early_leave')
+        late_permission = get_permission('late_check_in')
+        early_leave_permission = get_permission('early_leave')
         early_leave_granted = early_leave_permission is not None
 
         if not obj.check_in_time:
-            has_pending_permission = PermissionRequest.objects.filter(
-                student=student,
-                schedule=schedule,
-                status='pending'
-            ).exists()
-            
+            has_pending_permission = any(
+                pr.status == 'pending' for pr in prs
+            )
             if has_pending_permission:
                 return 'pending'
             elif late_permission:
-                if late_permission.adjusted_time and now <= late_permission.adjusted_time: #no check-in 
+                if late_permission.adjusted_time and now <= late_permission.adjusted_time:
                     return 'excused_late'
                 else:
                     return 'absent'
             else:
                 return 'absent'
-
 
         # Check-in time evaluation
         if late_permission and late_permission.adjusted_time:
@@ -271,39 +297,41 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 
         # Check-out time evaluation
         if early_leave_granted:
-            # If the student has early leave permission, check if the check-out time is before the adjusted time
             if obj.check_out_time >= late_permission.adjusted_time:
-                return 'check-in_early-excused' if is_on_time else f"{late_status}_early-excused" 
+                return 'check-in_early-excused' if is_on_time else f"{late_status}_early-excused"
             return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
         elif obj.check_out_time < last_session.end_time:
             return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
         else:
             return 'attended' if is_on_time else late_status
-    
-    
-    def get_adjusted_time(self, obj): #used by DRF implicitly 
-        """
-        Calculate the adjusted time based on the permission request.
-        """
-        permission_request = PermissionRequest.objects.filter(
-            student=obj.student, 
-            schedule=obj.schedule, 
-            status='approved'
-        ).first()
 
-        if permission_request:
-            return permission_request.adjusted_time
-
+    def get_adjusted_time(self, obj):
+        """
+        Calculate the adjusted time based on the prefetched permission requests.
+        """
+        # Use prefetched permission requests if available
+        permission_requests_map = getattr(self, '_permission_requests_map', None)
+        if permission_requests_map is None:
+            return obj.check_in_time
+        prs = permission_requests_map.get((obj.schedule_id, obj.student_id), [])
+        for pr in prs:
+            if pr.status == 'approved' and pr.adjusted_time:
+                return pr.adjusted_time
         return obj.check_in_time
+
     def get_leave_request_status(self, obj):
         """
-        Check if there is a pending leave request for the student and schedule.
+        Check if there is a pending leave request for the student and schedule using prefetched permission requests.
         """
-        pending_request = PermissionRequest.objects.filter(
-            student=obj.student, 
-            schedule=obj.schedule, 
-        ).first()
-        return pending_request.status if pending_request else None
+        permission_requests_map = getattr(self, '_permission_requests_map', None)
+        if permission_requests_map is None:
+            return None
+        prs = permission_requests_map.get((obj.schedule_id, obj.student_id), [])
+        for pr in prs:
+            if pr.status == 'pending':
+                return 'pending'
+        return None
+
     def get_track_name(self, obj):
         """
         Get the track name from the student object.
@@ -318,14 +346,6 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         has_warning, warning_type = obj.student.has_exceeded_warning_threshold()
         return warning_type if has_warning else None
     
-    # def to_representation(self, instance):
-    #     data = super().to_representation(instance)
-    #     if self.context.get('view').action == 'retrieve':
-    #         # Include the schedule name in the response
-    #         scheduleData = ScheduleSerializer(instance.schedule).data
-    #         data['schedule'] = scheduleData
-    #     return data
-
 class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
     schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
     class Meta:
