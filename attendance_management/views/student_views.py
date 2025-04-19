@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 from django.db.models import Prefetch
 from django.db.models import Count, Subquery, OuterRef, Q, IntegerField, Value, Case, When, F
-from ..models import PermissionRequest, ApplicationSetting
+from ..models import PermissionRequest, ApplicationSetting, Track
 
 class CustomPagination(PageNumberPagination):
     page_size = 10  # 10 students per page
@@ -84,8 +84,10 @@ class StudentViewSet(viewsets.ModelViewSet):
             request_type='day_excuse',
             status='approved'
         ).values('schedule_id')
+        tracks = Track.objects.filter(supervisor=request.user)
 
-        students = Student.objects.select_related('user', 'track').annotate(
+
+        students = Student.objects.select_related('user', 'track').filter(track__in=tracks).annotate(
             unexcused_count=Count('attendance_records', filter=Q(
                 attendance_records__check_in_time__isnull=True
             ) & ~Q(
