@@ -9,19 +9,22 @@ logger = logging.getLogger(__name__)
 class LostItemSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     status = serializers.ChoiceField(choices=ItemStatusChoices.choices, read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(source='user', read_only=True)
 
     class Meta:
         model = LostItem
-        fields = ['item_id', 'name', 'description', 'status', 'place', 'lost_at', 'image', 'user']
+        fields = ['item_id', 'name', 'description', 'status', 'place', 'lost_at', 'image', 'user', 'user_id']
         read_only_fields = ['item_id', 'lost_at']
 
 class FoundItemSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     status = serializers.ChoiceField(choices=ItemStatusChoices.choices, read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(source='user', read_only=True)
+    
 
     class Meta:
         model = FoundItem
-        fields = ['item_id', 'name', 'description', 'status', 'place', 'found_at', 'image', 'user']
+        fields = ['item_id', 'name', 'description', 'status', 'place', 'found_at', 'image', 'user', 'user_id']
         read_only_fields = ['item_id', 'found_at']
 
 class MatchedItemSerializer(serializers.ModelSerializer):

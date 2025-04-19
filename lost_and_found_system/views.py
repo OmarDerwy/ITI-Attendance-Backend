@@ -245,7 +245,74 @@ class MatchedItemViewSet(viewsets.ReadOnlyModelViewSet):
             "lost_item_status": lost_item.status,
             "found_item_status": found_item.status,
         })
-    
+
+    @action(detail=True, methods=['POST'], url_path='decline-match', url_name='decline-match')
+    def decline_match(self, request, pk=None):
+        """
+        Decline a match, revert items to their original status, and delete the match record.
+        Only the lost item owner or admin can decline a match.
+        
+        Requires only the matched_item ID (from URL).
+        """
+        # Get the matched item using the ID from the URL
+        match = get_object_or_404(MatchedItem, pk=pk)
+        
+        # Check if user is authorized (lost item owner or admin)
+        if match.lost_item.user != request.user and not request.user.is_staff:
+            return Response({
+                "error": "You are not authorized to decline this match."
+            }, status=403)
+
+        # Store data for response before deletion
+        lost_item_name = match.lost_item.name
+        found_item_name = match.found_item.name
+        lost_item_id = match.lost_item.item_id
+        found_item_id = match.found_item.item_id
+        
+        # Get references to both items
+        lost_item = match.lost_item
+        found_item = match.found_item
+        
+        # Revert the lost item status back to LOST
+        lost_item.status = ItemStatusChoices.LOST
+        lost_item.save(update_fields=['status'])
+        
+        # Revert the found item status back to FOUND
+        found_item.status = ItemStatusChoices.FOUND
+        found_item.save(update_fields=['status'])
+        
+        # Delete the match record
+        match.delete()
+        
+        # Notify the found item user that the match was declined
+        if found_item.user != request.user:
+            notification_message = (
+                f"The owner of '{lost_item_name}' has declined the match with your found item '{found_item_name}'. "
+                f"Your item has been returned to the active found items list."
+            )
+            
+            send_and_save_notification(
+                user=found_item.user,
+                title="Match Declined",
+                message=notification_message
+            )
+        
+        return Response({
+            "message": "Match has been declined successfully.",
+            "details": {
+                "lost_item": {
+                    "id": lost_item_id,
+                    "name": lost_item_name,
+                    "status": lost_item.status
+                },
+                "found_item": {
+                    "id": found_item_id,
+                    "name": found_item_name,
+                    "status": found_item.status
+                }
+            }
+        }, status=200)
+
 class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
