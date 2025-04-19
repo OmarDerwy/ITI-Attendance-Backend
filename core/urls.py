@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from . import views
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from debug_toolbar.toolbar import debug_toolbar_urls
 API_PREFIX = 'api/v1/'
 
 
@@ -35,4 +36,4 @@ urlpatterns = [
     path(f'{API_PREFIX}lost-and-found/', include('lost_and_found_system.urls')),
     path(f'{API_PREFIX}accounts/', include('users.urls')),
     path(f'{API_PREFIX}attendance/', include('attendance_management.urls')),
-]
+] + debug_toolbar_urls()
