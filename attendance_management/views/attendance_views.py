@@ -18,7 +18,7 @@ from collections import OrderedDict
 import calendar
 from rest_framework import status
 from rest_framework.views import APIView
-
+from dateutil.relativedelta import relativedelta
 
 logger = logging.getLogger(__name__)
 
@@ -1064,6 +1064,57 @@ class AttendanceViewSet(viewsets.ViewSet):
         response_data.sort(key=lambda x: (x['date'], x['track_name'], x['student_name']), reverse=True)
 
         return Response(response_data, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["get"], url_path="calendar")
+    def calendar(self, request):
+        supervisor= request.user
+        track_id = request.query_params.get('track_id')
+        page = int(request.query_params.get('page', 0))
+        now = datetime.now()
+        
+        # Each page = 2 months shift (0 = this + next, -1 = prev two, etc.)
+        # Always start at the first of the current month
+        now = datetime.now()
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # For page=0: current & previous month (e.g., April & March)
+        # For page=1: previous two months, etc.
+        start_date = current_month_start - relativedelta(months=page * 2 + 1)
+        end_date = start_date + relativedelta(months=2)
+        if end_date > now + relativedelta(days=1):
+            end_date = now + relativedelta(days=1)
+        tracks = Track.objects.filter(supervisor=supervisor)
+        if track_id:
+            tracks = tracks.filter(id=track_id)
+
+        schedules = Schedule.objects.filter(
+            track__in=tracks,
+            created_at__gte=start_date,
+            created_at__lt=end_date
+        ).select_related('track')
+
+        attendance_counts = AttendanceRecord.objects.filter(
+            schedule__in=schedules,
+            check_in_time__isnull=False
+        ).values('schedule').annotate(count=Count('id'))
+        attendance_map = {item['schedule']: item['count'] for item in attendance_counts}
+
+        result = {}
+
+        for schedule in schedules:
+            date_str = schedule.created_at.strftime('%Y-%m-%d')
+            total_students = schedule.track.students.count()
+            attended_count = attendance_map.get(schedule.id, 0)
+            percentage = (attended_count / total_students * 100) if total_students > 0 else 0.0
+            result[date_str] = round(percentage, 1)
+
+        return Response({
+            "start_month": start_date.strftime("%B"),
+            "end_month": (end_date - relativedelta(days=1)).strftime("%B"),
+            "year": start_date.year,
+            "calendar": result
+        }, status=status.HTTP_200_OK)
+
 
     @action(detail=False, methods=['GET'], url_path='student-attendance')
     def get_student_attendance(self, request):
