@@ -1086,15 +1086,53 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Get today's date
             today = timezone.localdate()
             
-            # Get today's and all past records
-            attendance_records = AttendanceRecord.objects.filter(
-                student=student,
-                schedule__created_at__lte=today
-            ).order_by('-schedule__created_at')  # Most recent first
-                
+            attendance_records = (
+                AttendanceRecord.objects
+                .filter(student=student, schedule__created_at__lte=today)
+                .select_related(
+                    'schedule',
+                    'schedule__track',
+                    'student__user',
+                    'student__track'
+                )
+                .prefetch_related(
+                    # Prefetch sessions for each schedule
+                    Prefetch(
+                        'schedule__sessions',
+                        queryset=Session.objects.order_by('start_time'),
+                        to_attr='prefetched_sessions'
+                    ),
+                    # Prefetch permission requests for the student
+                    Prefetch(
+                        'student__permission_requests',
+                        queryset=PermissionRequest.objects.filter(
+                            Q(schedule__created_at__lte=today) |
+                            Q(request_type='day_excuse'),
+                            status__in=['approved', 'pending']
+                        ).select_related('schedule'),
+                        to_attr='relevant_permissions'
+                    ),
+                    # Prefetch attendance_records for each schedule to avoid N+1 in Schedule.attended_out_of_total
+                    Prefetch(
+                        'schedule__attendance_records',
+                        queryset=AttendanceRecord.objects.select_related('student'),
+                        to_attr='prefetched_attendance_records'
+                    )
+                )
+                .order_by('-schedule__created_at')
+                .distinct()
+            )
+
+            # Attach prefetched attendance_records to each schedule instance
+            for record in attendance_records:
+                schedule = record.schedule
+                # Only set if not already set (in case of multiple records per schedule)
+                if not hasattr(schedule, 'prefetched_attendance_records'):
+                    # Find all attendance_records for this schedule from the prefetch cache
+                    # Django attaches them as schedule.prefetched_attendance_records
+                    pass  # Already attached by prefetch_related with to_attr
+
             serializer = AttendanceRecordSerializerForStudents(attendance_records, many=True)
-            
-            # Return simpler response structure
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Student.DoesNotExist:

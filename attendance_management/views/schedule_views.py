@@ -4,9 +4,10 @@ from rest_framework.response import Response
 from django.utils.timezone import now
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Prefetch
-from ..models import Schedule, Track
+from ..models import Schedule, Track, Student, AttendanceRecord, PermissionRequest
 from ..serializers import ScheduleSerializer
 from core import permissions
+from attendance_management.models import ApplicationSetting
 
 # Add custom pagination class
 class CustomPagination(PageNumberPagination):
@@ -53,8 +54,18 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         queryset = queryset.prefetch_related(
             Prefetch('sessions', to_attr='prefetched_sessions'),
             Prefetch('permission_requests', to_attr='prefetched_permission_requests'),
-            Prefetch('attendance_records', to_attr='prefetched_attendance_records'),
-            Prefetch('track__students', to_attr='prefetched_students'),
+            Prefetch(
+                'attendance_records',
+                queryset=AttendanceRecord.objects.select_related(
+                    'student', 'student__user', 'student__track', 'schedule', 'schedule__track'
+                ),
+                to_attr='prefetched_attendance_records'
+            ),
+            Prefetch(
+                'track__students',
+                queryset=Student.objects.select_related('user', 'track'),
+                to_attr='prefetched_students'
+            ),
         )
 
         queryset = queryset.order_by('-created_at')
@@ -65,4 +76,16 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         groups = user.groups.values_list('name', flat=True)
         if 'student' in groups:
             self.pagination_class = None  # Disable pagination for students
+        # Prefetch all ApplicationSetting objects and cache them for this request
+        settings_qs = ApplicationSetting.objects.all()
+        settings_map = {s.key: s for s in settings_qs}
+        # Attach to request for use in serializers/models
+        request._application_settings_map = settings_map
         return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        # Prefetch all ApplicationSetting objects and cache them for this request
+        settings_qs = ApplicationSetting.objects.all()
+        settings_map = {s.key: s for s in settings_qs}
+        request._application_settings_map = settings_map
+        return super().retrieve(request, *args, **kwargs)

@@ -50,6 +50,44 @@ class Schedule(models.Model):
     def __str__(self):
         return f"{self.name} - {self.track.name}"
 
+    @property
+    def start_time(self):
+        """
+        Get the start time from the first session of the day using prefetched data if available.
+        """
+        sessions = getattr(self, 'prefetched_sessions', None)
+        if sessions is None:
+            sessions = self.sessions.all()
+        first_session = min(sessions, key=lambda s: s.start_time, default=None)
+        return first_session.start_time if first_session else None
+
+    @property
+    def end_time(self):
+        """
+        Get the end time from the last session of the day using prefetched data if available.
+        """
+        sessions = getattr(self, 'prefetched_sessions', None)
+        if sessions is None:
+            sessions = self.sessions.all()
+        last_session = max(sessions, key=lambda s: s.end_time, default=None)
+        return last_session.end_time if last_session else None
+
+    @property
+    def attended_out_of_total(self):
+        """
+        Calculate the number of students attended the schedule out of total students in the track using the available attendance records.
+        Uses prefetched attendance_records if available.
+        """
+        attendance_records = getattr(self, 'prefetched_attendance_records', None)
+        if attendance_records is None:
+            attendance_records = self.attendance_records.all()
+        total_students = len(attendance_records)
+        attended_students = len({ar.student_id for ar in attendance_records if ar.check_in_time is not None})
+        return {
+            "attended": attended_students,
+            "total": total_students
+        }
+
 class Session(models.Model):
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='schedules')
     COURSE_CHOICES = [
@@ -82,16 +120,21 @@ class Student(models.Model):  # Renamed from StudentInfo
         An unexcused absence is defined as an attendance record with no check-in time
         and no approved permission request.
         """
-        from .models import PermissionRequest  # Import here to avoid circular import
-        no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
-        # Get all approved day excuse permission requests
+        from .models import PermissionRequest
+        attendance_records = getattr(self, 'prefetched_attendance_records', None)
+        if attendance_records is None:
+            no_checkin_records = self.attendance_records.select_related('schedule').filter(check_in_time__isnull=True)
+        else:
+            no_checkin_records = [ar for ar in attendance_records if ar.check_in_time is None]
         approved_excuses = PermissionRequest.objects.filter(
             student=self,
             request_type='day_excuse',
             status='approved'
         ).values_list('schedule_id', flat=True)
-        
-        return no_checkin_records.exclude(schedule_id__in=approved_excuses).count()
+        if hasattr(no_checkin_records, 'exclude'):
+            return no_checkin_records.exclude(schedule_id__in=approved_excuses).count()
+        else:
+            return len([ar for ar in no_checkin_records if ar.schedule_id not in approved_excuses])
     
     def get_excused_absence_count(self):
         """
@@ -99,28 +142,59 @@ class Student(models.Model):  # Renamed from StudentInfo
         An excused absence is defined as an attendance record with no check-in time
         and an approved day_excuse permission request.
         """
-        from .models import PermissionRequest  # Import here to avoid circular import
-        no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
+        from .models import PermissionRequest
+        attendance_records = getattr(self, 'prefetched_attendance_records', None)
+        if attendance_records is None:
+            no_checkin_records = self.attendance_records.select_related('schedule').filter(check_in_time__isnull=True)
+        else:
+            no_checkin_records = [ar for ar in attendance_records if ar.check_in_time is None]
         approved_excuses = PermissionRequest.objects.filter(
             student=self,
             request_type='day_excuse',
             status='approved'
         ).values_list('schedule_id', flat=True)
-        
-        return no_checkin_records.filter(schedule_id__in=approved_excuses).count()
-    
+        if hasattr(no_checkin_records, 'filter'):
+            return no_checkin_records.filter(schedule_id__in=approved_excuses).count()
+        else:
+            return len([ar for ar in no_checkin_records if ar.schedule_id in approved_excuses])
+
+    @staticmethod
+    def _get_settings_cache():
+        # Static cache for ApplicationSetting
+        if not hasattr(Student, '_settings_cache'):
+            Student._settings_cache = {}
+        return Student._settings_cache
+
     def has_exceeded_warning_threshold(self):
         """
         Check if the student has exceeded either the excused or unexcused absence threshold.
         Returns a tuple of (has_warning, warning_type) where warning_type is either 'excused' or 'unexcused'.
         """
         program_type = self.track.program_type
-        unexcused_threshold = ApplicationSetting.get_unexcused_absence_threshold(program_type)
-        excused_threshold = ApplicationSetting.get_excused_absence_threshold(program_type)
-        
+
+        # Use static/process-level cache for ApplicationSetting
+        cache = self._get_settings_cache()
+        excused_key = f'excused_absence_threshold_{program_type}'
+        unexcused_key = f'unexcused_absence_threshold_{program_type}'
+
+        if excused_key not in cache or unexcused_key not in cache:
+            # Only query once per process lifetime (or until cache is cleared)
+            from .settings_models import ApplicationSetting
+            settings = ApplicationSetting.objects.filter(
+                key__in=[excused_key, unexcused_key]
+            )
+            for s in settings:
+                cache[s.key] = int(s.value)
+            # Fallback if not found
+            cache.setdefault(excused_key, 3)
+            cache.setdefault(unexcused_key, 3)
+
+        excused_threshold = cache[excused_key]
+        unexcused_threshold = cache[unexcused_key]
+
         unexcused_count = self.get_unexcused_absence_count()
         excused_count = self.get_excused_absence_count()
-        
+
         if unexcused_count >= unexcused_threshold:
             return True, 'unexcused'
         elif excused_count >= excused_threshold:
@@ -172,5 +246,5 @@ class PermissionRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"{self.student} - {self.request_type} ({self.status})" 
+    # def __str__(self):
+    #     return f"{self.student} - {self.request_type} ({self.status})"

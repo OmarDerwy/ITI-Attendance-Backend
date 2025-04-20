@@ -14,31 +14,12 @@ class MiniTrackSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 class ScheduleSerializer(serializers.ModelSerializer):
-    track = MiniTrackSerializer(read_only=True)  # Read-only field for track
-    sessions = serializers.StringRelatedField(many=True, read_only=True)  # Read-only field for sessions
-    start_time = serializers.SerializerMethodField()
-    end_time = serializers.SerializerMethodField()
-    attended_out_of_total = serializers.SerializerMethodField()
+    track = serializers.SerializerMethodField()  # Read-only field for track
+    sessions = serializers.SerializerMethodField()  # Updated to use SerializerMethodField
     
     class Meta:
         model = Schedule
         fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time', 'attended_out_of_total']
-
-    def get_start_time(self, obj):
-        """Get the start time from the first session of the day using prefetched data"""
-        sessions = getattr(obj, 'prefetched_sessions', None)
-        if sessions is None:
-            sessions = obj.sessions.all()
-        first_session = min(sessions, key=lambda s: s.start_time, default=None)
-        return first_session.start_time if first_session else None
-        
-    def get_end_time(self, obj):
-        """Get the end time from the last session of the day using prefetched data"""
-        sessions = getattr(obj, 'prefetched_sessions', None)
-        if sessions is None:
-            sessions = obj.sessions.all()
-        last_session = max(sessions, key=lambda s: s.end_time, default=None)
-        return last_session.end_time if last_session else None
 
     def get_fields(self):
         fields = super().get_fields()
@@ -46,22 +27,21 @@ class ScheduleSerializer(serializers.ModelSerializer):
         if view and view.action == 'retrieve':
             fields['attendance_records'] = AttendanceRecordSerializer(many=True, read_only=True)
         return fields
+
+    def get_sessions(self, obj):
+        # Use prefetched sessions if available
+        sessions = getattr(obj, 'prefetched_sessions', None)
+        if sessions is None:
+            sessions = obj.sessions.all()
+        return [str(session) for session in sessions]
     
-    def get_attended_out_of_total(self, obj):
-        """
-        Calculate the number of students attended the schedule out of total students in the track using the available attendance records.
-        Uses prefetched attendance_records if available.
-        """
-        attendance_records = getattr(obj, 'prefetched_attendance_records', None)
-        if attendance_records is None:
-            attendance_records = obj.attendance_records.all()
-        total_students = len(attendance_records)
-        attended_students = len({ar.student_id for ar in attendance_records if ar.check_in_time is not None})
-        return {
-            "attended": attended_students,
-            "total": total_students
-        }
-        
+    def get_track(self, obj):
+        # Use prefetched track if available
+        track = getattr(obj, 'prefetched_track', None)
+        if track is None:
+            track = obj.track
+        return {'id': track.id, 'name': track.name} if track else None
+
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
         model = Student
@@ -180,11 +160,21 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     def get_student(self, obj):
         """
         Return first_name and last_name from the CustomUser model via Student.user.
+        Use prefetched student and user if available.
         """
+        student = getattr(obj, 'student', None)
+        if hasattr(obj, 'prefetched_student'):
+            student = obj.prefetched_student
+        user = getattr(student, 'user', None)
+        if hasattr(student, 'prefetched_user'):
+            user = student.prefetched_user
+        if user is None:
+            user = student.user
         return {
-            "first_name": obj.student.user.first_name,
-            "last_name": obj.student.user.last_name
+            "first_name": user.first_name,
+            "last_name": user.last_name
         }
+
 
     def get_status(self, obj):
         """
@@ -444,11 +434,21 @@ class StudentWithWarningSerializer(serializers.ModelSerializer):
         ]
 
     def get_warning_type(self, obj):
+        # Attach request to student for ApplicationSetting cache
+        request = self.context.get('request')
+        if request:
+            obj._request = request
         has_warning, warning_type = obj.has_exceeded_warning_threshold()
         return warning_type
 
     def get_unexcused_absences(self, obj):
+        request = self.context.get('request')
+        if request:
+            obj._request = request
         return obj.get_unexcused_absence_count()
 
     def get_excused_absences(self, obj):
+        request = self.context.get('request')
+        if request:
+            obj._request = request
         return obj.get_excused_absence_count()
