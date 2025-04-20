@@ -146,12 +146,10 @@ class BranchSerializer(serializers.ModelSerializer):
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field
-    status = serializers.SerializerMethodField()
     adjusted_time = serializers.SerializerMethodField()
     leave_request_status = serializers.SerializerMethodField()
     track_name = serializers.SerializerMethodField()  
     warning_status = serializers.SerializerMethodField()  # Added warning_status field
-
 
     class Meta:
         model = AttendanceRecord
@@ -177,110 +175,6 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             "last_name": obj.student.user.last_name
         }
 
-    def get_status(self, obj):
-        """
-        Determine the status of the attendance record based on the conditions.
-        # Possible statuses:
-        # - 'excused': Student has an approved day excuse.
-        # - 'pending': Schedule is in the future OR student has a pending permission request and hasn't checked in.
-        # - 'no_sessions': Schedule has no sessions defined.
-        # - 'excused_late': Student has approved late permission, is within the adjusted time, but hasn't checked in yet.
-        # - 'absent': Student did not check in and is past the deadline or excused late window.
-        # - 'check-in': Student checked in on time, session is ongoing.
-        # - 'late-check-in_active': Student checked in late (no excuse), session is ongoing.
-        # - 'late-excused_active': Student checked in late (with excuse), session is ongoing.
-        # - 'no-check-out': Student checked in on time, but did not check out after the session ended.
-        # - 'late-check-in_no-check-out': Student checked in late (no excuse), did not check out after the session ended.
-        # - 'late-excused_no-check-out': Student checked in late (with excuse), did not check out after the session ended.
-        # - 'attended': Student checked in on time and checked out on time or later.
-        # - 'late-check-in': Student checked in late (no excuse) and checked out on time or later.
-        # - 'late-excused': Student checked in late (with excuse) and checked out on time or later.
-        # - 'check-in_early-check-out': Student checked in on time but checked out early (no excuse).
-        # - 'late-check-in_early-check-out': Student checked in late (no excuse) and checked out early (no excuse).
-        # - 'late-excused_early-check-out': Student checked in late (with excuse) and checked out early (no excuse).
-        # - 'check-in_early-excused': Student checked in on time and checked out early (with excuse).
-        # - 'late-check-in_early-excused': Student checked in late (no excuse) and checked out early (with excuse).
-        # - 'late-excused_early-excused': Student checked in late (with excuse) and checked out early (with excuse).
-        """
-        student = obj.student
-        schedule = obj.schedule
-        today = datetime.now().date()
-        now = datetime.now()
-
-        def has_permission(request_type):
-            return PermissionRequest.objects.filter(
-                student=student,
-                schedule=schedule,
-                request_type=request_type,
-                status='approved'
-            ).first()
-
-        day_excuse = has_permission('day_excuse') #what if he atteneded the class?
-        if day_excuse:
-            return 'excused'
-
-        if schedule.created_at > today:
-            return 'pending'
-
-        sessions = schedule.sessions.all()
-        first_session = sessions.order_by('start_time').first()
-        last_session = sessions.order_by('-end_time').first()
-
-        if not first_session or not last_session:
-            return 'no_sessions'
-
-        grace_period = timedelta(minutes=15)
-        check_in_deadline = first_session.start_time + grace_period
-
-        late_permission = has_permission('late_check_in')
-        early_leave_permission = has_permission('early_leave')
-        early_leave_granted = early_leave_permission is not None
-
-        if not obj.check_in_time:
-            has_pending_permission = PermissionRequest.objects.filter(
-                student=student,
-                schedule=schedule,
-                status='pending'
-            ).exists()
-            
-            if has_pending_permission:
-                return 'pending'
-            elif late_permission:
-                if late_permission.adjusted_time and now <= late_permission.adjusted_time: #no check-in 
-                    return 'excused_late'
-                else:
-                    return 'absent'
-            else:
-                return 'absent'
-
-
-        # Check-in time evaluation
-        if late_permission and late_permission.adjusted_time:
-            is_on_time = obj.check_in_time <= late_permission.adjusted_time
-            late_status = 'late-excused'
-        else:
-            is_on_time = obj.check_in_time <= check_in_deadline
-            late_status = 'late-check-in'
-
-        # Check-out is required except for day_excuse
-        if not obj.check_out_time:
-            if schedule.created_at == today and now.time() < last_session.end_time.time():
-                return 'check-in' if is_on_time else f"{late_status}_active"
-            else:
-                return 'no-check-out' if is_on_time else f"{late_status}_no-check-out"
-
-        # Check-out time evaluation
-        if early_leave_granted:
-            # If the student has early leave permission, check if the check-out time is before the adjusted time
-            if obj.check_out_time >= late_permission.adjusted_time:
-                return 'check-in_early-excused' if is_on_time else f"{late_status}_early-excused" 
-            return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
-        elif obj.check_out_time < last_session.end_time:
-            return 'check-in_early-check-out' if is_on_time else f"{late_status}_early-check-out"
-        else:
-            return 'attended' if is_on_time else late_status
-    
-    
     def get_adjusted_time(self, obj): #used by DRF implicitly 
         """
         Calculate the adjusted time based on the permission request.
