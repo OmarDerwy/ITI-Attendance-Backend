@@ -78,8 +78,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                     "error_code": "account_not_active"
                 }, status=status.HTTP_403_FORBIDDEN)
             
-
-            
             # Check if the student has a UUID
             if student.phone_uuid and student.phone_uuid != uuid:
                 # Student has a different UUID - return error message
@@ -165,11 +163,53 @@ class AttendanceViewSet(viewsets.ViewSet):
             # User is within the geofence - update check-in time and mark student as checked in
             current_time = timezone.localtime()
             
-            # Update check_in_time if not already set
-            if not attendance_record.check_in_time:
-                attendance_record.check_in_time = current_time
-                attendance_record.save(update_fields=['check_in_time'])
-                logger.info(f"Check-in time set for student {student.user.email}")
+            # Get first session start time for lateness calculation
+            sessions = schedule.sessions.all().order_by('start_time')
+            if not sessions.exists():
+                attendance_record.status = 'no_sessions'
+                attendance_record.save(update_fields=['status'])
+                return Response({
+                    "status": "warning",
+                    "message": "Check-in recorded, but this schedule has no sessions defined.",
+                    "schedule_name": schedule.name
+                })
+            
+            first_session = sessions.first()
+            
+            # Check for permission requests
+            permission_request = PermissionRequest.objects.filter(
+                student=student,
+                schedule=schedule,
+                status='approved'
+            ).first()
+            
+            # Determine status based on timing and permissions
+            is_late = current_time > (first_session.start_time + timedelta(minutes=15))
+            
+            if permission_request:
+                # Handle approved permissions
+                if permission_request.request_type == 'late_check_in':
+                    if permission_request.adjusted_time and current_time <= permission_request.adjusted_time:
+                        # Within approved late window
+                        status_to_set = 'late-excused'
+                    else:
+                        # Late even beyond approved time
+                        status_to_set = 'late-check-in'
+                elif permission_request.request_type == 'day_excuse':
+                    # Should not reach here if properly excused for the day
+                    status_to_set = 'excused'
+                else:
+                    # Other permission types (like early_leave) - regular check-in
+                    status_to_set = 'late-check-in' if is_late else 'check-in'
+            else:
+                # No permissions
+                status_to_set = 'late-check-in' if is_late else 'check-in'
+            
+            # Update check_in_time and status
+            attendance_record.check_in_time = current_time
+            attendance_record.status = status_to_set
+            attendance_record.save(update_fields=['check_in_time', 'status'])
+            logger.info(f"Check-in time set for student {student.user.email} with status: {status_to_set}")
             
             # Mark student as checked in
             student.is_checked_in = True
@@ -333,21 +373,96 @@ class AttendanceViewSet(viewsets.ViewSet):
             # User is within the geofence - set check-out time and update student status
             current_time = timezone.localtime()
             
-            # Update check_out_time
-            attendance_record.check_out_time = current_time
-            attendance_record.save(update_fields=['check_out_time'])
-            logger.info(f"Check-out time set for student {student.user.email}")
+            # Get sessions for timing calculations
+            sessions = schedule.sessions.all().order_by('-end_time')
+            if not sessions.exists():
+                attendance_record.check_out_time = current_time
+                attendance_record.status = 'no_sessions'
+                attendance_record.save(update_fields=['check_out_time', 'status'])
+                
+                # Update student check-in status
+                student.is_checked_in = False
+                student.save(update_fields=['is_checked_in'])
+                
+                return Response({
+                    "status": "warning",
+                    "message": "Check-out recorded, but this schedule has no sessions defined.",
+                    "schedule_name": schedule.name
+                })
             
-            # Explicitly set and save student's check-in status to False
+            last_session = sessions.first()  # Get the session that ends last
+            
+            # Check for permission requests
+            permission_requests = PermissionRequest.objects.filter(
+                student=student,
+                schedule=schedule,
+                status='approved'
+            )
+            
+            # Check if there's an early leave permission
+            early_leave_permission = permission_requests.filter(request_type='early_leave').first()
+            
+            # Check if there was a late check-in permission
+            late_checkin_permission = permission_requests.filter(request_type='late_check_in').first()
+            
+            # Determine if check-out is early (before session end)
+            is_early_checkout = current_time < last_session.end_time
+            
+            # Determine base status from check-in status
+            current_status = attendance_record.status
+            
+            # Determine final status based on check-in status, timing, and permissions
+            if current_status in ['check-in']:
+                # Normal check-in
+                if is_early_checkout:
+                    if early_leave_permission:
+                        status_to_set = 'check-in_early-excused'
+                    else:
+                        status_to_set = 'check-in_early-check-out'
+                else:
+                    status_to_set = 'attended'
+                    
+            elif current_status in ['late-check-in']:
+                # Late check-in without excuse
+                if is_early_checkout:
+                    if early_leave_permission:
+                        status_to_set = 'late-check-in_early-excused'
+                    else:
+                        status_to_set = 'late-check-in_early-check-out'
+                else:
+                    status_to_set = 'late-check-in'
+                    
+            elif current_status in ['late-excused']:
+                # Late check-in with excuse
+                if is_early_checkout:
+                    if early_leave_permission:
+                        status_to_set = 'late-excused_early-excused'
+                    else:
+                        status_to_set = 'late-excused_early-check-out'
+                else:
+                    status_to_set = 'late-excused'
+                    
+            else:
+                # Any other status (shouldn't normally happen)
+                if is_early_checkout and not early_leave_permission:
+                    status_to_set = 'check-in_early-check-out'
+                else:
+                    status_to_set = 'attended'
+            
+            # Update check_out_time and status
+            attendance_record.check_out_time = current_time
+            attendance_record.status = status_to_set
+            attendance_record.save(update_fields=['check_out_time', 'status'])
+            logger.info(f"Check-out time set for student {student.user.email} with status: {status_to_set}")
+            
+            # Set student as checked out
             student.is_checked_in = False
             student.save(update_fields=['is_checked_in'])
             logger.info(f"Student {student.user.email} marked as checked out")
             
-            # Calculate duration of attendance
+            # Calculate duration of attendance 
             time_difference = attendance_record.check_out_time - attendance_record.check_in_time
             hours = time_difference.total_seconds() / 3600
-            
-            logger.info(f"Student {student.user.email} successfully checked out at {branch.name}")
             
             return Response({
                 "status": "success",
@@ -700,7 +815,8 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Reset check-in and check-out times
             attendance_record.check_in_time = None
             attendance_record.check_out_time = None
-            attendance_record.save(update_fields=['check_in_time', 'check_out_time'])
+            attendance_record.status = 'absent'
+            attendance_record.save(update_fields=['check_in_time', 'check_out_time', 'status'])
 
             # get permission request if exists
             permission_request = PermissionRequest.objects.filter(student=attendance_record.student, schedule=attendance_record.schedule).first()
@@ -763,7 +879,8 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Update attendance record
             attendance_record.check_in_time = check_in_time
             attendance_record.check_out_time = check_out_time
-            attendance_record.save(update_fields=['check_in_time', 'check_out_time'])
+            attendance_record.status = 'attended'  # Manually set records get 'attended' status
+            attendance_record.save(update_fields=['check_in_time', 'check_out_time', 'status'])
             
             permission_request = PermissionRequest.objects.filter(student=student, schedule=schedule, status='approved').first()
 
@@ -1273,44 +1390,20 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Get today's date
             today = timezone.localdate()
             
-            # Fetch records with all needed related data in optimized queries
+            # Fetch records with minimal related data for better performance
             records = AttendanceRecord.objects.filter(
                 student=student,
                 schedule__created_at__lte=today
-            ).select_related(
-                'student__user',
-                'student__track',
-                'schedule'
-            ).prefetch_related(
-                'schedule__sessions',
-                Prefetch(
-                    'student__permission_requests',
-                    queryset=PermissionRequest.objects.filter(
-                        student=student,
-                        status__in=['approved', 'pending']
-                    ).select_related('schedule'),
-                    to_attr='relevant_permissions'
-                )
-            )
+            ).select_related('schedule').values('schedule__created_at', 'status')
             
-            # Create an instance of the serializer to use its get_status method
-            serializer_instance = AttendanceRecordSerializer()
-            
-            # Build a lightweight response
-            result = []
-            for record in records:
-                try:
-                    attendance_status = serializer_instance.get_status(record)
-                    result.append({
-                        'date': record.schedule.created_at,
-                        'status': attendance_status,
-                    })
-                except Exception as e:
-                    logger.warning(f"Error calculating status for record {record.id}: {e}")
-                    result.append({
-                        'date': record.schedule.created_at,
-                        'status': 'error_calculating_status',
-                    })
+            # Build a lightweight response directly from the database values
+            result = [
+                {
+                    'date': record['schedule__created_at'],
+                    'status': record['status'],
+                }
+                for record in records
+            ]
             
             # Use explicit integer status code instead of status.HTTP_200_OK
             return Response(result, status=200)
@@ -1324,138 +1417,6 @@ class AttendanceViewSet(viewsets.ViewSet):
             return Response({
                 "error": str(e)
             }, status=500)  # Using explicit status code instead of status.HTTP_500_INTERNAL_SERVER_ERROR
-
-    # @action(detail=False, methods=['GET'], url_path='branch-attendance-trends', permission_classes=[IsSupervisorOrAboveUser])
-    # def get_branch_attendance_trends(self, request):
-    #     """
-    #     Get attendance trends (daily, weekly, and monthly) for all branches.
-    #     Optionally filter by:
-    #     - 'branch_id' query parameter: Data for a specific branch
-    #     - 'track_id' query parameter: Data for a specific track
-    #     Both filters can be used together to get highly specific data.
-    #     """
-    #     try:
-    #         # Get filter parameters from query
-    #         branch_id = request.query_params.get('branch_id')
-    #         track_id = request.query_params.get('track_id')
-            
-    #         # Start with all schedules
-    #         schedules_query = Schedule.objects.all()
-            
-    #         # Filter by branch if branch_id is provided
-    #         if branch_id:
-    #             try:
-    #                 branch = Branch.objects.get(id=branch_id)
-    #                 schedules_query = schedules_query.filter(custom_branch=branch)
-    #             except Branch.DoesNotExist:
-    #                 return Response({
-    #                     "status": "error",
-    #                     "message": "The specified branch does not exist."
-    #                 }, status=status.HTTP_404_NOT_FOUND)
-            
-    #         # Filter by track if track_id is provided
-    #         if track_id:
-    #             try:
-    #                 track = Track.objects.get(id=track_id)
-    #                 schedules_query = schedules_query.filter(track=track)
-    #             except Track.DoesNotExist:
-    #                 return Response({
-    #                     "status": "error",
-    #                     "message": "The specified track does not exist."
-    #                 }, status=status.HTTP_404_NOT_FOUND)
-                
-    #         # Get the filtered schedules
-    #         schedules = schedules_query.all()
-                
-    #         if not schedules.exists():
-    #             return Response({
-    #                 "status": "error",
-    #                 "message": "No schedules found for the selected criteria."
-    #             }, status=status.HTTP_404_NOT_FOUND)
-            
-    #         # Daily trends grouped by branch
-    #         daily_trends = AttendanceRecord.objects.filter(
-    #             schedule__in=schedules,
-    #             check_in_time__isnull=False
-    #         ).annotate(
-    #             date=TruncDate('schedule__created_at')
-    #         ).values(
-    #             'date', 'schedule__custom_branch__name'
-    #         ).annotate(
-    #             attended=Count('id')
-    #         ).order_by('date', 'schedule__custom_branch__name')
-
-    #         # Weekly trends grouped by branch
-    #         weekly_trends = AttendanceRecord.objects.filter(
-    #             schedule__in=schedules,
-    #             check_in_time__isnull=False
-    #         ).annotate(
-    #             week=TruncWeek('schedule__created_at')
-    #         ).values(
-    #             'week', 'schedule__custom_branch__name'
-    #         ).annotate(
-    #             attended=Count('id')
-    #         ).order_by('week', 'schedule__custom_branch__name')
-
-    #         # Monthly trends grouped by branch
-    #         monthly_trends = AttendanceRecord.objects.filter(
-    #             schedule__in=schedules,
-    #             check_in_time__isnull=False
-    #         ).annotate(
-    #             month=TruncMonth('schedule__created_at')
-    #         ).values(
-    #             'month', 'schedule__custom_branch__name'
-    #         ).annotate(
-    #             attended=Count('id')
-    #         ).order_by('month', 'schedule__custom_branch__name')
-
-    #         # Format the response to group by branch
-    #         response_data = {
-    #             "daily_trends": self._format_trends_by_branch(daily_trends, 'date'),
-    #             "weekly_trends": self._format_trends_by_branch(weekly_trends, 'week'),
-    #             "monthly_trends": self._format_trends_by_branch(monthly_trends, 'month')
-    #         }
-
-    #         # Add filter information to the response
-    #         filter_info = {}
-    #         if branch_id:
-    #             filter_info["branch_id"] = branch_id
-    #             filter_info["branch_name"] = branch.name
-    #         if track_id:
-    #             filter_info["track_id"] = track_id
-    #             filter_info["track_name"] = track.name
-                
-    #         if filter_info:
-    #             response_data["filters_applied"] = filter_info
-
-    #         return Response(response_data, status=status.HTTP_200_OK)
-    #     except Exception as e:
-    #         logger.error(f"Error fetching branch attendance trends: {str(e)}")
-    #         return Response({
-    #             "status": "error",
-    #             "message": f"An error occurred: {str(e)}"
-    #         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    # def _format_trends_by_branch(self, trends, date_field):
-    #     """
-    #     Helper method to format attendance trends data by branch.
-    #     """
-    #     formatted_trends = {}
-    #     for item in trends:
-    #         date_key = str(item[date_field])
-    #         branch_name = item['schedule__custom_branch__name']
-            
-    #         if date_key not in formatted_trends:
-    #             formatted_trends[date_key] = {}
-            
-    #         formatted_trends[date_key][branch_name] = item['attended']
-            
-    #         # Add a total for each date
-    #         if 'total' not in formatted_trends[date_key]:
-    #             formatted_trends[date_key]['total'] = 0
-    #         formatted_trends[date_key]['total'] += item['attended']
-            
-    #     return formatted_trends
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
