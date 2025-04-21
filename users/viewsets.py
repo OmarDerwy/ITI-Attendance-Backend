@@ -12,6 +12,7 @@ from django.utils.crypto import get_random_string
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from django.db.models import Q
 # import from attendance_management
 from attendance_management import models as attend_models
@@ -386,6 +387,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     def make_inactive(self, request, *args, **kwargs):
         student = self.get_object()
         student.is_active = False
+        student.is_banned = True
         # delete attendance future records for user if they exist
         student_profile = student.student_profile
         upcoming_attendance_records =  student_profile.attendance_records.filter(schedule__created_at__gte=timezone.localtime())
@@ -397,6 +399,9 @@ class StudentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='resend-activation')
     def resend_activation(self, request, *args, **kwargs):
         student = self.get_object()
+        student.is_banned = False
+        if student.is_active:
+            return Response({'message': 'User is already active.'}, status=400)
         access_token = AccessToken.for_user(student)
         create_password_url = f"http://localhost:8080/activate/{access_token}/"
         # For development: print the link
@@ -518,3 +523,18 @@ class UserActivateView(APIView):
             print(f"Created {numOfAttenCreated} attendance records for {user.email}.")
             return Response({'message': 'User has been activated successfully.', 'attendance_records_created': numOfAttenCreated})
         return Response({'message': 'User has been activated successfully.'})
+    
+class TokenBlacklistViewAll(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'error': 'User is not authenticated.'}, status=401)
+
+        # Get all tokens for the user and blacklist them
+        tokens = OutstandingToken.objects.filter(user_id=user)
+        for token in tokens:
+            token.blacklist()
+
+        return Response({'message': 'All tokens have been blacklisted successfully.'})

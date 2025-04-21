@@ -44,6 +44,7 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
     slug_name = models.SlugField(max_length=255, blank=True, null=True, unique=True)
+    is_banned = models.BooleanField(default=False)
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['groups']  # Remove username from required fields
 
