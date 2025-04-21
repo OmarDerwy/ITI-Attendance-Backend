@@ -48,7 +48,7 @@ class Schedule(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.name} - {self.track.name}"
+        return f"{self.name}"
 
     @property
     def start_time(self):
@@ -112,7 +112,7 @@ class Student(models.Model):  # Renamed from StudentInfo
     is_checked_in = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.user.first_name} {self.user.last_name} - {self.track.name}"
+        return f"{self.user}"
     
     @property
     def unexcused_absences(self):
@@ -277,7 +277,7 @@ class AttendanceRecord(models.Model):
             models.Index(fields=['status']),  # Add index for the new status field
         ]
 
-    def _str_(self):
+    def __str__(self):
         return f"AttendanceRecord(Student: {self.student}, Schedule: {self.schedule})"
 
 class PermissionRequest(models.Model):
