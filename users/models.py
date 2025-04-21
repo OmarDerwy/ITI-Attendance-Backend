@@ -69,7 +69,7 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
         self.last_name = self.last_name or ''
         self.slug_name = slugify(f"{self.first_name} {self.last_name}")
         # check for existing slug_name and if found then return error
-        if CustomUser.objects.filter(slug_name=self.slug_name).exists():
+        if CustomUser.objects.filter(slug_name=self.slug_name).exclude(pk=self.id).exists():
             user_name = f"{self.first_name} {self.last_name}".strip()
             raise ValidationError(f"User {self.first_name} {self.last_name} already exists.")
         super().save(*args, **kwargs)
