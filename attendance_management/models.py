@@ -203,6 +203,16 @@ class Student(models.Model):  # Renamed from StudentInfo
         return False, None
 
 class AttendanceRecord(models.Model):
+    STATUS_CHOICES = [
+        ('attended', 'Attended'),
+        ('absent', 'Absent'),
+        ('late', 'Late'),
+        ('excused', 'Excused'),
+        ('excused_late', 'Excused Late'),
+        ('no-check-out', 'No Check-out'),
+        ('late-check-in_no-check-out', 'Late Check-in & No Check-out'),
+        ('pending', 'Pending'),
+    ]
     PERMISSION_CHOICES = [
         ('none', 'None'),
         ('approved', 'Approved'),
@@ -213,17 +223,19 @@ class AttendanceRecord(models.Model):
     schedule = models.ForeignKey('Schedule', on_delete=models.CASCADE, related_name='attendance_records')
     check_in_time = models.DateTimeField(blank=True, null=True)
     check_out_time = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='absent')
+    
     class Meta:
         indexes = [
             models.Index(fields=['check_in_time']),
             models.Index(fields=['check_out_time']),
             models.Index(fields=['student']),
             models.Index(fields=['schedule']),
+            models.Index(fields=['status']),  # Add index for the new status field
         ]
 
     def _str_(self):
         return f"AttendanceRecord(Student: {self.student}, Schedule: {self.schedule})"
-
 
 class PermissionRequest(models.Model):
     REQUEST_TYPES = [
@@ -246,5 +258,5 @@ class PermissionRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # def __str__(self):
-    #     return f"{self.student} - {self.request_type} ({self.status})"
+    def __str__(self):
+        return f"{self.student} - {self.request_type} ({self.status})"

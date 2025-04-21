@@ -1,0 +1,11 @@
+meta {
+  name: calendar_attendance_stats
+  type: http
+  seq: 5
+}
+
+get {
+  url: http://localhost:8000/api/v1/attendance/schedules/calendar_attendance_stats
+  body: none
+  auth: inherit
+}
