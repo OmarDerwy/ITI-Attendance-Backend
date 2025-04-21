@@ -1148,7 +1148,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             )
 
             try:
-                final_status = serializer_instance.get_status(record)
+                final_status = record.status
             except Exception as e:
                 print(f"Error getting status for student {record.student_id}, schedule {record.schedule_id}: {e}")
                 final_status = "error"

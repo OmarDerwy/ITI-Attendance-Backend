@@ -211,8 +211,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         Get the warning status ('excused' or 'unexcused') if a threshold is exceeded.
         Relies on the optimized Student.has_exceeded_warning_threshold() method.
         """
-        has_warning, warning_type = obj.student.has_exceeded_warning_threshold()
-        return warning_type if has_warning else None
+        return obj.student.warning_status if obj.student else None
     
 class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
     schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
@@ -288,15 +287,13 @@ class PermissionRequestSerializer(serializers.ModelSerializer):
             "phone_number": obj.student.user.phone_number,
         }
 
-# Added StudentWithWarningSerializer
+# Updated StudentWithWarningSerializer
 class StudentWithWarningSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
     email = serializers.CharField(source='user.email', read_only=True)
     track_name = serializers.CharField(source='track.name', read_only=True)
     warning_type = serializers.SerializerMethodField()
-    unexcused_absences = serializers.SerializerMethodField()
-    excused_absences = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -312,21 +309,8 @@ class StudentWithWarningSerializer(serializers.ModelSerializer):
         ]
 
     def get_warning_type(self, obj):
-        # Attach request to student for ApplicationSetting cache
+        # Attach request to student for ApplicationSetting cache if needed
         request = self.context.get('request')
         if request:
             obj._request = request
-        has_warning, warning_type = obj.has_exceeded_warning_threshold()
-        return warning_type
-
-    def get_unexcused_absences(self, obj):
-        request = self.context.get('request')
-        if request:
-            obj._request = request
-        return obj.get_unexcused_absence_count()
-
-    def get_excused_absences(self, obj):
-        request = self.context.get('request')
-        if request:
-            obj._request = request
-        return obj.get_excused_absence_count()
+        return obj.warning_status
