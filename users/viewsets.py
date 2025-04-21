@@ -22,20 +22,12 @@ dotenv.load_dotenv()
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = models.CustomUser.objects.all().order_by('id')
+    queryset = models.CustomUser.objects.all().order_by('id').prefetch_related('groups', 'student_profile')
     http_method_names = ['get', 'put', 'patch', 'delete', 'post']
     permission_classes = [core_permissions.IsInstructorOrAboveUser]
 
-    # def get_queryset(self):               #deprecated
-    #     user = self.request.user
-    #     userGroups = user.groups.all()
-    #     if 'supervisor' in userGroups.values_list('name', flat=True):
-    #         # If the user is a supervisor, filter the queryset to only include their students
-    #         hisTrack = user.tracks.get()
-    #         StudentObjs = models.CustomUser.objects.filter(student_profile__track=hisTrack)
-    #         return StudentObjs.order_by('id')
-    #     return models.CustomUser.objects.all().order_by('id')
-    
+    def get_queryset(self):
+        return models.CustomUser.objects.all().order_by('id').prefetch_related('groups', 'student_profile')
 
     def get_serializer_class(self):
         if self.request.method.lower() == 'post':
@@ -44,35 +36,35 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='students')
     def students_list(self, request):
         group = Group.objects.get(name="student")
-        data = self.get_queryset().filter(groups=group,is_active=True)
+        data = self.get_queryset().filter(groups=group, is_active=True).prefetch_related('groups')
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'], url_path='instructors')
     def instructors_list(self, request):
         group = Group.objects.get(name="instructor")
-        data = self.get_queryset().filter(groups=group, is_active=True)
+        data = self.get_queryset().filter(groups=group, is_active=True).prefetch_related('groups')
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'], url_path='supervisors')
     def supervisors_list(self, request):
         group = Group.objects.get(name="supervisor")
-        data = self.get_queryset().filter(groups=group)
+        data = self.get_queryset().filter(groups=group).prefetch_related('groups')
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'], url_path='admins')
     def admins_list(self, request):
         group = Group.objects.get(name="admin")
-        data = self.get_queryset().filter(groups=group)
+        data = self.get_queryset().filter(groups=group).prefetch_related('groups')
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'], url_path='admins-and-supervisors')
     def admins_supervisors_list(self, request):
         group = Group.objects.filter(name__in=["admin", "supervisor"])
-        data = self.get_queryset().filter(groups__in=group).distinct()
+        data = self.get_queryset().filter(groups__in=group).distinct().prefetch_related('groups')
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
     
