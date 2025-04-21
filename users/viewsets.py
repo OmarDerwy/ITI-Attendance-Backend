@@ -541,7 +541,7 @@ class TokenBlacklistViewAll(APIView):
             return Response({'error': 'User is not authenticated.'}, status=401)
 
         # Get all tokens for the user and blacklist them
-        tokens = OutstandingToken.objects.filter(user=user)
+        tokens = OutstandingToken.objects.filter(user_id=user)
         for token in tokens:
             token.blacklist()
 
