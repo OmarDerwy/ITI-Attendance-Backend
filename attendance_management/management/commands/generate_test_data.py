@@ -37,7 +37,7 @@ class Command(BaseCommand):
             "Writing Good Technical Docs", "Time Estimation for Tasks", "Agile & Scrum Basics",
             "How to Read Technical Specs"
         ]
-        session_times = [("09:00–12:00",), ("10:00–13:00",), ("14:00–16:00",), ("16:00–18:00",)]
+        session_times = [("09:00–12:00",), ("12:00–15:00",), ("16:00–18:00",)]
 
         # Get the existing track with ID 4
         try:
