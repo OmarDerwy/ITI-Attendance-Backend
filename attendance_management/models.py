@@ -83,7 +83,14 @@ class Student(models.Model):  # Renamed from StudentInfo
         and no approved permission request.
         """
         from .models import PermissionRequest  # Import here to avoid circular import
-        no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
+        from django.utils import timezone
+        today = timezone.now().date()
+        
+        # Only include records for schedules before today
+        no_checkin_records = self.attendance_records.filter(
+            check_in_time__isnull=True,
+            schedule__created_at__lt=today
+        )
         # Get all approved day excuse permission requests
         approved_excuses = PermissionRequest.objects.filter(
             student=self,
@@ -100,7 +107,14 @@ class Student(models.Model):  # Renamed from StudentInfo
         and an approved day_excuse permission request.
         """
         from .models import PermissionRequest  # Import here to avoid circular import
-        no_checkin_records = self.attendance_records.filter(check_in_time__isnull=True)
+        from django.utils import timezone
+        today = timezone.now().date()
+        
+        # Only include records for schedules before today
+        no_checkin_records = self.attendance_records.filter(
+            check_in_time__isnull=True,
+            schedule__created_at__lt=today
+        )
         approved_excuses = PermissionRequest.objects.filter(
             student=self,
             request_type='day_excuse',
