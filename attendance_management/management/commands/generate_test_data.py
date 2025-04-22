@@ -39,11 +39,11 @@ class Command(BaseCommand):
         ]
         session_times = [("09:00–12:00",), ("10:00–13:00",), ("14:00–16:00",), ("16:00–18:00",)]
 
-        # Get the existing track with ID 1
+        # Get the existing track with ID 4
         try:
-            track = Track.objects.get(id=1)
+            track = Track.objects.get(id=4)
         except Track.DoesNotExist:
-            self.stdout.write(self.style.ERROR('Track with ID 1 not found!'))
+            self.stdout.write(self.style.ERROR('Track with ID 4 not found!'))
             return
 
         # Get all students in this track
@@ -54,9 +54,22 @@ class Command(BaseCommand):
         
         # Generate Schedules and Sessions
         current_date = start_date
+        
+        # Track vacation days for each week
+        current_week_start = current_date - timedelta(days=current_date.weekday())
+        vacation_days_of_week = random.sample(range(7), 2)  # Pick 2 random days (0=Monday, 6=Sunday)
+        
         while current_date <= end_date:
-            # Determine day type based on the day of the week
+            # Check if we're in a new week, and if so, select new random vacation days
+            week_start = current_date - timedelta(days=current_date.weekday())
+            if week_start != current_week_start:
+                current_week_start = week_start
+                vacation_days_of_week = random.sample(range(7), 2)  # New random vacation days
+                self.stdout.write(self.style.SUCCESS(f'NEW WEEK: Vacation days set to {[["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][day] for day in vacation_days_of_week]}'))
+            
+            # Determine day type based on whether it's a vacation day
             day_of_week = current_date.weekday()
+            is_vacation = day_of_week in vacation_days_of_week
             
             # Create a schedule for this day
             schedule = Schedule.objects.create(
@@ -67,8 +80,8 @@ class Command(BaseCommand):
                 is_shared=False
             )
             
-            # Friday and Saturday are always off (weekend)
-            if day_of_week in [4, 5]:  # Friday and Saturday
+            # Handle vacation days
+            if is_vacation:
                 self.stdout.write(self.style.WARNING(f'Vacation day: {current_date.strftime("%A, %b %d")}'))
             else:
                 # For remaining days, determine if the entire day is online or offline
@@ -117,18 +130,60 @@ class Command(BaseCommand):
                     
                     # Create attendance records for all students in this track for this session
                     for student in students:
-                        # For online sessions, higher attendance rate (90%)
-                        # For offline sessions, normal attendance rate (80%)
-                        attendance_threshold = 0.1 if is_online else 0.2
+                        # INCREASED ATTENDANCE RATE: 
+                        # For online sessions, much higher attendance rate (95%)
+                        # For offline sessions, high attendance rate (90%)
+                        attendance_threshold = 0.05 if is_online else 0.1
                         has_attended = random.random() > attendance_threshold
-                        # 90% of those who attended also checked out properly
-                        has_checked_out = has_attended and random.random() > 0.1
                         
+                        # Generate check-in and check-out times with realistic behavior
+                        check_in_time = None
+                        check_out_time = None
+                        status = 'absent'  # Default status
+                        
+                        if has_attended:
+                            # Determine if student is on time or late (15% chance of being late)
+                            is_late = random.random() < 0.15
+                            
+                            if is_late:
+                                # Late by 5-20 minutes
+                                late_minutes = random.randint(5, 20)
+                                check_in_time = start_time + timedelta(minutes=late_minutes)
+                            else:
+                                # On time (0-10 minutes early)
+                                early_minutes = random.randint(0, 10)
+                                check_in_time = start_time - timedelta(minutes=early_minutes)
+                            
+                            # 90% of those who attended also checked out properly
+                            has_checked_out = random.random() > 0.1
+                            
+                            if has_checked_out:
+                                # Most people check out at the end time or slightly after/before
+                                checkout_offset = random.randint(-10, 20)  # minutes
+                                check_out_time = end_time + timedelta(minutes=checkout_offset)
+                                
+                                # Set appropriate status based on check-in and check-out
+                                if is_late:
+                                    status = 'late'
+                                else:
+                                    status = 'attended'
+                            else:
+                                # No check-out
+                                if is_late:
+                                    status = 'late-check-in_no-check-out'
+                                else:
+                                    status = 'no-check-out'
+                        else:
+                            # Small chance of having an excused absence
+                            is_excused = random.random() < 0.3
+                            status = 'excused' if is_excused else 'absent'
+                                
                         AttendanceRecord.objects.create(
                             student=student,
                             schedule=schedule,
-                            check_in_time=start_time if has_attended else None,
-                            check_out_time=end_time if has_checked_out else None
+                            check_in_time=check_in_time,
+                            check_out_time=check_out_time,
+                            status=status
                         )
             
             current_date += timedelta(days=1)
