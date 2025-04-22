@@ -237,6 +237,55 @@ class UserViewSet(viewsets.ModelViewSet):
                 serializer = serializers.GroupSerializer(current_groups, many=True)
                 return Response({'message': 'Specified groups removed successfully', 'current_groups': serializer.data})
 
+    @action(detail=False, methods=['POST'], url_path='change-password', permission_classes=[permissions.IsAuthenticated])
+    def change_password(self, request):
+        """
+        Endpoint to change a user's password.
+        Requires old_password and new_password in the request body.
+        Validates that the old password is correct before changing to the new password.
+        """
+        user = request.user
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        
+        # Validate input data
+        if not old_password or not new_password:
+            return Response(
+                {"error": "Both old_password and new_password are required."}, 
+                status=400
+            )
+            
+        # Check if old password is correct
+        if not user.check_password(old_password):
+            return Response(
+                {"error": "Current password is incorrect."}, 
+                status=400
+            )
+        
+        try:
+            # Set new password
+            user.set_password(new_password)
+            # Save with update_fields to ensure we only update the password field
+            user.save(update_fields=['password'])
+            
+            # Generate a new token for the user
+            from rest_framework_simplejwt.tokens import RefreshToken
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                "message": "Password changed successfully.",
+                "user_email": user.email,
+                "tokens": {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                }
+            }, status=200)
+        except Exception as e:
+            return Response({
+                "error": f"An error occurred while changing password. Please contact support.",
+                "detail": str(e)
+            }, status=500)
+
 
 
 class GroupViewSet(viewsets.ModelViewSet):
