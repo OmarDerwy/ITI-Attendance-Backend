@@ -1,0 +1,17 @@
+meta {
+  name: update photo
+  type: http
+  seq: 12
+}
+
+post {
+  url: http://localhost:8000/api/v1/accounts/users/update-photo/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "photo_url":"https://res.cloudinary.com/dha2yp5tj/image/upload/v1743672450/iiobcuq9yayuassmqwqz.jpg"
+  }
+}

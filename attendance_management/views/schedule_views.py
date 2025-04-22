@@ -6,6 +6,13 @@ from rest_framework.pagination import PageNumberPagination
 from ..models import Schedule, Track
 from ..serializers import ScheduleSerializer
 from core import permissions
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api/v1/')
+
 # Add custom pagination class
 class CustomPagination(PageNumberPagination):
     def get_paginated_response(self, data):
@@ -13,7 +20,7 @@ class CustomPagination(PageNumberPagination):
         for key in ['next', 'previous']:
             link = response.data.get(key)
             if link:
-                response.data[key] = link.replace("http://localhost:8000/api/v1/", "")
+                response.data[key] = link.replace(API_BASE_URL, "")
         return response
 
 class ScheduleViewSet(viewsets.ModelViewSet):
