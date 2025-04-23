@@ -26,13 +26,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9j41$k*nn8e$2^(1jcm^5c68cj1aofg$#ag-*p-3y9ya0k1d8u'
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
+# security settings
+CSRF_COOKIE_SECURE = False # Set to True in production and False in development
+SESSION_COOKIE_SECURE = False # Set to True in production and False in development
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_SSL_REDIRECT = False  # Redirect all HTTP requests to HTTPS  # Set to True in production and False in development
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Apply HSTS to all subdomains
+SECURE_HSTS_PRELOAD = True  # Enable HTTP Strict Transport Security (HSTS)
 
-ALLOWED_HOSTS = ['localhost', '192.168.1.115', '127.0.0.1', '*']
+
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 
 # Application definition
@@ -70,13 +78,13 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'core.urls'
+#Update CORS_ALLOW_ALL_ORIGINS after frontend deployment
 CORS_ALLOW_ALL_ORIGINS = True  
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     "authorization",
     "content-type",
 ]
-ALLOWED_HOSTS = ["*"]  # Allow all hosts for testing (not recommended for production)
 
 TEMPLATES = [
     {
@@ -131,19 +139,19 @@ DATABASES = {
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [ # will enable again in production
-    # {
-    #     'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    # },
-    # {
-    #     'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    # },
-    # {
-    #     'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    # },
-    # {
-    #     'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    # },
+AUTH_PASSWORD_VALIDATORS = [ 
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
 ]
 
 # email settings
@@ -235,9 +243,9 @@ DJOSER = {
 }
 
 SIMPLE_JWT = {
-   'AUTH_HEADER_TYPES': ('Bearer',),
-   'ACCESS_TOKEN_LIFETIME': timedelta(weeks=1),
-   'REFRESH_TOKEN_LIFETIME': timedelta(weeks=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(weeks=1),
 }
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Attendance Project API',
@@ -268,29 +276,35 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'INFO',  # Set the logging level to INFO
+            'level': 'WARNING',  # Show only warnings and above in production console
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',  # Use the simple formatter
+            'formatter': 'simple',
+        },
+        'file': {
+            'level': 'INFO',  # Save detailed logs to file
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/app.log'),
+            'formatter': 'verbose',
         },
     },
     'root': {
-        'handlers': ['console'],
-        'level': 'WARNING',  # Suppress root-level logs unless they are warnings or higher
+        'handlers': ['console', 'file'],
+        'level': 'WARNING',  # Root logger only captures warnings and errors
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
-            'level': 'INFO',  # Show only endpoint logs from Django
+            'handlers': ['console', 'file'],
+            'level': 'INFO',  # Include HTTP requests and other events
             'propagate': False,
         },
         'lost_and_found_system': {
-            'handlers': ['console'],
-            'level': 'DEBUG',  # Show all logs from your app
+            'handlers': ['console', 'file'],
+            'level': 'INFO',  # Lower in production; use DEBUG in dev
             'propagate': False,
         },
         'attendance_management': {
-            'handlers': ['console'],
-            'level': 'DEBUG',  # Show all logs from your app
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
             'propagate': False,
         },
     },
