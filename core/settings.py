@@ -112,6 +112,10 @@ ASGI_APPLICATION = 'core.asgi.application'
 
 tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
 database_name = os.getenv("DATABASE_NAME", "neondb")
+
+# Extract the endpoint ID from the hostname (e.g., ep-orange-rain-a2usbm66)
+endpoint_id = tmpPostgres.hostname.split('.')[0] if tmpPostgres.hostname else None
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -119,7 +123,11 @@ DATABASES = {
         'USER': tmpPostgres.username,
         'PASSWORD': tmpPostgres.password,
         'HOST': tmpPostgres.hostname,
-        'PORT': 5432,
+        'PORT': tmpPostgres.port or '5432',
+        'OPTIONS': {
+            'sslmode': 'require',  # Ensure SSL is required
+            'options': f'endpoint={endpoint_id}' if endpoint_id else None # Pass endpoint ID directly
+        },
     },
     'local': { # for local testing sqlite3
         'ENGINE': 'django.db.backends.sqlite3',
