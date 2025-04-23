@@ -1003,7 +1003,16 @@ class AttendanceViewSet(viewsets.ViewSet):
             days_since_saturday = (weekday - 5) % 7
             start_of_week = today - timedelta(days=days_since_saturday)
             week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
-
+            # Exclude upcoming days beyond today
+            week_dates = [d for d in week_dates if d <= today]
+            # Exclude today if the first session hasn't started yet
+            if today in week_dates:
+                first_session = Session.objects.filter(
+                    schedule__track__in=tracks,
+                    schedule__created_at=today
+                ).order_by('start_time').first()
+                if first_session and first_session.start_time > timezone.localtime():
+                    week_dates.remove(today)
             response_data = OrderedDict()
 
             for date in week_dates:
@@ -1188,7 +1197,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             #         "status": "error",
             #         "message": "Your account is not active. Please contact an administrator."
             #     }, status=status.HTTP_403_FORBIDDEN)
-
+            
             # Get today's date
             today = timezone.localdate()
             
