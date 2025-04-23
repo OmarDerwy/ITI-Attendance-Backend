@@ -598,22 +598,23 @@ class AttendanceViewSet(viewsets.ViewSet):
 
             date = timezone.localdate()
 
-            total_students = 0
-            attended_students = 0
-
-            for track in tracks:
-                schedules = Schedule.objects.filter(track=track, created_at=date)
-                scheduled_students = Student.objects.filter(
-                attendance_records__schedule__in=schedules
-            ).distinct().count()
-                total_students += scheduled_students
-
-                # Count how many of the scheduled students actually attended today
-                attended_students += AttendanceRecord.objects.filter(
-                    student__track=track,
-                    schedule__in=schedules,
-                    check_in_time__isnull=False
-                ).count()
+            all_schedules = Schedule.objects.filter(track__in=tracks, created_at=date)
+            student_scheds = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules
+            ).values('schedule__track_id', 'student').distinct()
+            
+            scheduled_map = {}
+            for rec in student_scheds:
+                tid = rec['schedule__track_id']
+                scheduled_map[tid] = scheduled_map.get(tid, 0) + 1
+            # Count actual attendance records per track
+            actual_qs = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules,
+                check_in_time__isnull=False
+            ).values('schedule__track_id').annotate(count=Count('id'))
+            actual_map = {item['schedule__track_id']: item['count'] for item in actual_qs}
+            total_students = sum(scheduled_map.values())
+            attended_students = sum(actual_map.values())
 
             attendance_percentage = (attended_students / total_students) * 100 if total_students > 0 else 0
 
@@ -1013,6 +1014,25 @@ class AttendanceViewSet(viewsets.ViewSet):
                 ).order_by('start_time').first()
                 if first_session and first_session.start_time > timezone.localtime():
                     week_dates.remove(today)
+            all_schedules = Schedule.objects.filter(track__in=tracks, created_at__in=week_dates)
+            schedule_count_map = {}
+            for sched in all_schedules:
+                key = (sched.track_id, sched.created_at)
+                schedule_count_map[key] = schedule_count_map.get(key, 0) + 1
+            student_scheds = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules
+            ).values('schedule__track_id', 'schedule__created_at', 'student').distinct()
+            scheduled_map = {}
+            for rec in student_scheds:
+                key = (rec['schedule__track_id'], rec['schedule__created_at'])
+                scheduled_map[key] = scheduled_map.get(key, 0) + 1
+            actual_qs = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules, check_in_time__isnull=False
+            ).values('schedule__track_id', 'schedule__created_at').annotate(count=Count('id'))
+            actual_map = {
+                (item['schedule__track_id'], item['schedule__created_at']): item['count']
+                for item in actual_qs
+            }
             response_data = OrderedDict()
 
             for date in week_dates:
@@ -1022,26 +1042,15 @@ class AttendanceViewSet(viewsets.ViewSet):
                 total_actual_records = 0
 
                 for track in tracks:
-                    schedules = Schedule.objects.filter(track=track, created_at=date)
-
-                    if not schedules.exists():
-                        daily_data[track.name] = {
-                            "status": "Free Day"
-                        }
+                    key = (track.id, date)
+                    # No schedules = free day
+                    if schedule_count_map.get(key, 0) == 0:
+                        daily_data[track.name] = {"status": "Free Day"}
                         continue
-
-                    # Count only students scheduled today
-                    scheduled_students = Student.objects.filter(
-                        attendance_records__schedule__in=schedules
-                    ).distinct().count()
-                    
-                    total_students = scheduled_students
-                    expected_records = total_students * schedules.count()
-                    actual_records = AttendanceRecord.objects.filter(
-                        student__track=track,
-                        schedule__in=schedules,
-                        check_in_time__isnull=False
-                    ).count()
+                    schedule_count = schedule_count_map[key]
+                    scheduled_students = scheduled_map.get(key, 0)
+                    expected_records = scheduled_students * schedule_count
+                    actual_records = actual_map.get(key, 0)
 
                     present_percent = (actual_records / expected_records) * 100 if expected_records else 0
                     absent_percent = 100 - present_percent
@@ -1053,11 +1062,9 @@ class AttendanceViewSet(viewsets.ViewSet):
                         "absent_percent": round(absent_percent, 2)
                     }
 
-                    # Aggregate totals for "All tracks"
                     total_expected_records += expected_records
                     total_actual_records += actual_records
 
-                # Calculate the "All tracks" data
                 if total_expected_records > 0:
                     all_tracks_present_percent = (total_actual_records / total_expected_records) * 100
                     all_tracks_absent_percent = 100 - all_tracks_present_percent
@@ -1082,7 +1089,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
     @action(detail=False, methods=['get'], url_path='recent-absences')
     def recent_absences(self, request, *args, **kwargs):
         """
@@ -1102,31 +1108,36 @@ class AttendanceViewSet(viewsets.ViewSet):
             'absent', 'excused',
         }
 
-        # Filter today's attendance records for the given track and absence statuses
-        absence_records = AttendanceRecord.objects.filter(
-        schedule__created_at=today,  # Ensures filtering by today's date
-        student__track__in=tracks,
-        status__in=reportable_statuses
-    ).order_by('-schedule__created_at')
+        # Fetch absence records with related student and schedule to avoid N+1
+        absence_records = (
+            AttendanceRecord.objects
+            .filter(
+                schedule__created_at=today,
+                student__track__in=tracks,
+                status__in=reportable_statuses
+            )
+            .select_related('student__user', 'schedule')
+            .order_by('-schedule__created_at')
+        )
 
-        formatted_data = [
-        {
-        "student": record.student.user.first_name + " " + record.student.user.last_name,
-        "date": record.schedule.created_at.strftime("%b %d, %Y"),
-        "reason": PermissionRequest.objects.filter(
-            student=record.student,
-            schedule=record.schedule
-        ).first().reason if PermissionRequest.objects.filter(
-            student=record.student,
-            schedule=record.schedule
-        ).exists() else "no reason found",
-        "status": record.status,
-        }
-        for record in absence_records
-        ]
+        # Batch load permission reasons to avoid per-record queries
+        keys = {(rec.student_id, rec.schedule_id) for rec in absence_records}
+        perms = PermissionRequest.objects.filter(
+            student_id__in={k[0] for k in keys},
+            schedule_id__in={k[1] for k in keys}
+        ).values('student_id', 'schedule_id', 'reason')
+        perm_map = {(p['student_id'], p['schedule_id']): p['reason'] for p in perms}
+        formatted_data = []
+        for rec in absence_records:
+            reason = perm_map.get((rec.student_id, rec.schedule_id), "no reason found")
+            formatted_data.append({
+                "student": f"{rec.student.user.first_name} {rec.student.user.last_name}",
+                "date": rec.schedule.created_at.strftime("%b %d, %Y"),
+                "reason": reason,
+                "status": rec.status
+            })
         return Response(formatted_data)
-    
-    
+
     @action(detail=False, methods=["get"], url_path="calendar")
     def calendar(self, request):
         supervisor= request.user
