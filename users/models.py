@@ -44,8 +44,11 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
     first_name = models.CharField(max_length=30, blank=True, null=True)
     last_name = models.CharField(max_length=30, blank=True, null=True)
     slug_name = models.SlugField(max_length=255, blank=True, null=True, unique=True)
+    is_banned = models.BooleanField(default=False)
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['groups']  # Remove username from required fields
+    #add a photo_url field:
+    photo_url = models.URLField(blank=True, null=True)
 
     objects = CustomUserManager()  # Use the custom manager
 
@@ -68,10 +71,17 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
         self.first_name = self.first_name or ''
         self.last_name = self.last_name or ''
         self.slug_name = slugify(f"{self.first_name} {self.last_name}")
-        # check for existing slug_name and if found then return error
-        if CustomUser.objects.filter(slug_name=self.slug_name).exclude(pk=self.id).exists():
+        
+        # Check for existing slug_name but exclude the current instance
+        if self.pk:  # If this is an existing user (has a primary key)
+            duplicate_users = CustomUser.objects.filter(slug_name=self.slug_name).exclude(pk=self.pk)
+        else:  # If this is a new user (no primary key yet)
+            duplicate_users = CustomUser.objects.filter(slug_name=self.slug_name)
+            
+        if duplicate_users.exists():#.exists? 
             user_name = f"{self.first_name} {self.last_name}".strip()
             raise ValidationError(f"User {self.first_name} {self.last_name} already exists.")
+            
         super().save(*args, **kwargs)
 
     # def save(self, *args, **kwargs):

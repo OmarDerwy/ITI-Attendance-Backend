@@ -12,14 +12,18 @@ from django.utils.crypto import get_random_string
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from django.db.models import Q
 # import from attendance_management
 from attendance_management import models as attend_models
 import os
-import dotenv
-dotenv.load_dotenv()
+from dotenv import load_dotenv
 
-
+# Load environment variables
+load_dotenv()
+FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:8080')
+ACTIVATION_PATH = os.getenv('ACTIVATION_PATH', '/activate/')
+RESET_PASSWORD_PATH = os.getenv('RESET_PASSWORD_PATH', '/reset-password/')
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = models.CustomUser.objects.all().order_by('id').prefetch_related('groups', 'student_profile')
@@ -33,6 +37,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.request.method.lower() == 'post':
             return serializers.UserCreateSerializer
         return serializers.CustomUserSerializer
+
     @action(detail=False, methods=['get'], url_path='students')
     def students_list(self, request):
         group = Group.objects.get(name="student")
@@ -72,7 +77,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         # Check supervisor permissions
         request_user = self.request.user
-        if not request_user.groups.filter(name='admin').exists():        # .all().values_list('name', flat=True):
+        if not request_user.groups.filter(name='admin').exists():
             return Response({'error': 'You do not have permission to create users'}, status=403)
         
         # Extract required data
@@ -98,7 +103,7 @@ class UserViewSet(viewsets.ModelViewSet):
         
         # Create activation token and URL
         access_token = AccessToken.for_user(user)
-        create_password_url = f"http://localhost:8080/activate/{access_token}/"
+        create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
         
         # For development: print the link
         print(f"Confirmation link for {email}: {create_password_url}")
@@ -122,7 +127,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         
         request_user = self.request.user
-        if not request_user.groups.filter(name='admin').exists():        # .all().values_list('name', flat=True):
+        if not request_user.groups.filter(name='admin').exists():
             return Response({'error': 'You do not have permission to update users'}, status=403)
         
         user = self.get_object()
@@ -140,7 +145,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
             # Create activation token and URL
             access_token = AccessToken.for_user(user)
-            create_password_url = f"http://localhost:8080/activate/{access_token}/"
+            create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
 
             # For development: print the link
             print(f"Confirmation link for {email}: {create_password_url}")
@@ -228,6 +233,110 @@ class UserViewSet(viewsets.ModelViewSet):
                 serializer = serializers.GroupSerializer(current_groups, many=True)
                 return Response({'message': 'Specified groups removed successfully', 'current_groups': serializer.data})
 
+    @action(detail=False, methods=['POST'], url_path='change-password', permission_classes=[permissions.IsAuthenticated])
+    def change_password(self, request):
+        """
+        Endpoint to change a user's password.
+        Requires old_password and new_password in the request body.
+        Validates that the old password is correct before changing to the new password.
+        """
+        user = request.user
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        
+        # Validate input data
+        if not old_password or not new_password:
+            return Response(
+                {"error": "Both old_password and new_password are required."}, 
+                status=400
+            )
+            
+        # Check if old password is correct
+        if not user.check_password(old_password):
+            return Response(
+                {"error": "Current password is incorrect."}, 
+                status=400
+            )
+        
+        try:
+            # Set new password
+            user.set_password(new_password)
+            # Save with update_fields to ensure we only update the password field
+            user.save(update_fields=['password'])
+            
+            # Generate a new token for the user
+            from rest_framework_simplejwt.tokens import RefreshToken
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                "message": "Password changed successfully.",
+                "user_email": user.email,
+                "tokens": {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                }
+            }, status=200)
+        except Exception as e:
+            return Response({
+                "error": f"An error occurred while changing password. Please contact support.",
+                "detail": str(e)
+            }, status=500)
+
+    @action(detail=False, methods=['POST'], url_path='update-photo', permission_classes=[permissions.IsAuthenticated])
+    def update_profile_photo(self, request):
+        """
+        Update the user's profile photo URL.
+        
+        Request body should contain:
+        - photo_url: URL of the profile photo
+        """
+        user = request.user
+        photo_url = request.data.get('photo_url')
+        
+        if not photo_url:
+            return Response({"error": "photo_url is required."}, status=400)
+        
+        try:
+            user.photo_url = photo_url
+            user.save(update_fields=['photo_url'])
+            
+            return Response({
+                "message": "Profile photo updated successfully.",
+                "photo_url": user.photo_url
+            }, status=200)
+        except Exception as e:
+            return Response({
+                "error": f"An error occurred while updating profile photo: {str(e)}"
+            }, status=500)
+
+    @action(detail=False, methods=['GET'], url_path='photo', permission_classes=[permissions.IsAuthenticated])
+    def get_profile_photo(self, request):
+        """
+        Retrieve just the profile picture URL of the currently authenticated user.
+        
+        Returns only the photo_url field for simpler API consumption.
+        """
+        user = request.user
+        
+        return Response({
+            "photo_url": user.photo_url
+        }, status=200)
+
+    @action(detail=False, methods=['GET'], url_path='profile', permission_classes=[permissions.IsAuthenticated])
+    def get_profile(self, request):
+        """
+        Retrieve the profile of the currently authenticated user.
+        
+        Returns all user data including photo URL and other profile fields.
+        """
+        # Get current user object
+        user = request.user
+        
+        # Serialize the user data
+        serializer = self.get_serializer(user)
+        
+        return Response(serializer.data, status=200)
+
 
 
 class GroupViewSet(viewsets.ModelViewSet):
@@ -250,7 +359,7 @@ class ResetPassword(APIView):
 
         token = AccessToken.for_user(user)
 
-        reset_url = f"http://localhost:8080/reset-password/{user.id}/{token}/"
+        reset_url = f"{FRONTEND_BASE_URL}{RESET_PASSWORD_PATH}{user.id}/{token}/"
         send_mail(
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{reset_url}",
@@ -334,7 +443,6 @@ class StudentViewSet(viewsets.ModelViewSet):
         if not track_id:
             return Response({'error': 'Track ID is required'}, status=400)
         track_obj = request_user.tracks.get(id=track_id)
-        # track_obj = request_user.tracks.first()
         if not track_obj:
             return Response({'error': 'You are not currently the supervisor of any track'}, status=400)
         
@@ -363,7 +471,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         
         # Create activation token and URL
         access_token = AccessToken.for_user(user)
-        create_password_url = f"http://localhost:8080/activate/{access_token}/"
+        create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
         
         # For development: print the link
         print(f"Confirmation link for {email}: {create_password_url}")
@@ -386,6 +494,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     def make_inactive(self, request, *args, **kwargs):
         student = self.get_object()
         student.is_active = False
+        student.is_banned = True
         # delete attendance future records for user if they exist
         student_profile = student.student_profile
         upcoming_attendance_records =  student_profile.attendance_records.filter(schedule__created_at__gte=timezone.localtime())
@@ -397,8 +506,11 @@ class StudentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='resend-activation')
     def resend_activation(self, request, *args, **kwargs):
         student = self.get_object()
+        student.is_banned = False
+        if student.is_active:
+            return Response({'message': 'User is already active.'}, status=400)
         access_token = AccessToken.for_user(student)
-        create_password_url = f"http://localhost:8080/activate/{access_token}/"
+        create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
         # For development: print the link
         print(f"Confirmation link for {student.email}: {create_password_url}")
         send_mail(
@@ -427,7 +539,6 @@ class BulkCreateStudents(APIView):
             return Response({'error': 'You do not have permission to create users'}, status=403)
         for user_data in users:
             email = user_data.get('email')
-            # groups = user_data.get('groups', [])
             first_name = user_data.get('first_name')
             last_name = user_data.get('last_name')
             phone_number = user_data.get('phone_number')
@@ -466,7 +577,7 @@ class BulkCreateStudents(APIView):
 
             # create tokens for users
             access_token = AccessToken.for_user(user)
-            create_password_url= f"http://localhost:8080/activate/{access_token}/"
+            create_password_url= f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
 
             # aggregate confirmation links
             print(f"Confirmation link for {email}: {create_password_url}")
@@ -518,3 +629,18 @@ class UserActivateView(APIView):
             print(f"Created {numOfAttenCreated} attendance records for {user.email}.")
             return Response({'message': 'User has been activated successfully.', 'attendance_records_created': numOfAttenCreated})
         return Response({'message': 'User has been activated successfully.'})
+    
+class TokenBlacklistViewAll(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'error': 'User is not authenticated.'}, status=401)
+
+        # Get all tokens for the user and blacklist them
+        tokens = OutstandingToken.objects.filter(user_id=user)
+        for token in tokens:
+            token.blacklist()
+
+        return Response({'message': 'All tokens have been blacklisted successfully.'})

@@ -1003,7 +1003,16 @@ class AttendanceViewSet(viewsets.ViewSet):
             days_since_saturday = (weekday - 5) % 7
             start_of_week = today - timedelta(days=days_since_saturday)
             week_dates = [start_of_week + timedelta(days=i) for i in range(7)]
-
+            # Exclude upcoming days beyond today
+            week_dates = [d for d in week_dates if d <= today]
+            # Exclude today if the first session hasn't started yet
+            if today in week_dates:
+                first_session = Session.objects.filter(
+                    schedule__track__in=tracks,
+                    schedule__created_at=today
+                ).order_by('start_time').first()
+                if first_session and first_session.start_time > timezone.localtime():
+                    week_dates.remove(today)
             response_data = OrderedDict()
 
             for date in week_dates:
@@ -1186,7 +1195,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             #         "status": "error",
             #         "message": "Your account is not active. Please contact an administrator."
             #     }, status=status.HTTP_403_FORBIDDEN)
-
+            
             # Get today's date
             today = timezone.localdate()
             
@@ -1364,13 +1373,15 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Get today's date
             today = timezone.localdate()
             
-            # Fetch records with minimal related data for better performance
+            # Efficient JOIN between AttendanceRecord and Schedule tables
             records = AttendanceRecord.objects.filter(
                 student=student,
                 schedule__created_at__lte=today
-            ).select_related('schedule').values('schedule__created_at', 'status')
+            ).select_related('schedule').only(
+                'status', 'schedule__created_at'
+            ).values('status', 'schedule__created_at')
             
-            # Build a lightweight response directly from the database values
+            # Build a simple response with just the needed fields
             result = [
                 {
                     'date': record['schedule__created_at'],
@@ -1379,18 +1390,93 @@ class AttendanceViewSet(viewsets.ViewSet):
                 for record in records
             ]
             
-            # Use explicit integer status code instead of status.HTTP_200_OK
             return Response(result, status=200)
 
         except Student.DoesNotExist:
             return Response({
                 "error": "No student record found for the logged-in user."
-            }, status=404)  # Using explicit status code
+            }, status=404)
         except Exception as e:
             logger.error(f"Error fetching student attendance summary: {str(e)}")
             return Response({
                 "error": str(e)
-            }, status=500)  # Using explicit status code instead of status.HTTP_500_INTERNAL_SERVER_ERROR
+            }, status=500)
+
+    @action(detail=False, methods=['GET'], url_path='attendance-stats')
+    def get_attendance_stats(self, request):
+        """
+        Get attendance statistics for the logged-in student.
+        Returns:
+        - Total attended days
+        - Total absent days
+        - Attendance percentage
+        - Status based on thresholds (good, warning, danger)
+        """
+        try:
+            # Get the logged-in user's student profile
+            student = Student.objects.get(user=request.user)
+            
+            # Get student's program type from track
+            program_type = student.track.program_type
+            
+            # Get threshold values based on program type from application settings
+            from ..models import ApplicationSetting
+            unexcused_threshold = ApplicationSetting.get_unexcused_absence_threshold(program_type)
+            excused_threshold = ApplicationSetting.get_excused_absence_threshold(program_type)
+            
+            # Fetch past attendance records
+            today = timezone.localdate()
+            past_records = AttendanceRecord.objects.filter(
+                student=student,
+                schedule__created_at__lte=today,
+                schedule__sessions__isnull=False,  # Ensure there were sessions
+            ).distinct()
+            
+            # Count attendance data
+            total_days = past_records.count()
+            total_attended = past_records.filter(check_in_time__isnull=False).count()
+            total_absent = total_days - total_attended
+            
+            # Get excused and unexcused absences
+            unexcused_absences = student.get_unexcused_absence_count()
+            excused_absences = student.get_excused_absence_count()
+            
+            # Calculate percentage
+            attendance_percentage = (total_attended / total_days) * 100 if total_days > 0 else 0
+            
+            # Determine status
+            attendance_status = "good"
+            if unexcused_absences >= unexcused_threshold or excused_absences >= excused_threshold:
+                attendance_status = "danger"
+            elif unexcused_absences >= unexcused_threshold * 0.7 or excused_absences >= excused_threshold * 0.7:
+                attendance_status = "warning"
+            
+            return Response({
+                "total_days": total_days,
+                "total_attended": total_attended,
+                "total_absent": total_absent,
+                "unexcused_absences": unexcused_absences,
+                "excused_absences": excused_absences,
+                "attendance_percentage": round(attendance_percentage, 2),
+                "attendance_status": attendance_status,
+                "program_type": program_type,
+                "thresholds": {
+                    "unexcused_threshold": unexcused_threshold,
+                    "excused_threshold": excused_threshold,
+                    "unexcused_consumed": f"{unexcused_absences}/{unexcused_threshold}",
+                    "excused_consumed": f"{excused_absences}/{excused_threshold}"
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Student.DoesNotExist:
+            return Response({
+                "error": "No student record found for the logged-in user."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching attendance stats: {str(e)}")
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
         """
