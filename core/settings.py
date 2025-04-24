@@ -30,11 +30,11 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 DEBUG = False
 # security settings
-CSRF_COOKIE_SECURE = False # Set to True in production and False in development
-SESSION_COOKIE_SECURE = False # Set to True in production and False in development
+CSRF_COOKIE_SECURE = True # Set to True in production and False in development
+SESSION_COOKIE_SECURE = True # Set to True in production and False in development
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_SSL_REDIRECT = False  # Redirect all HTTP requests to HTTPS  # Set to True in production and False in development
+SECURE_SSL_REDIRECT = True  # Redirect all HTTP requests to HTTPS  # Set to True in production and False in development
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Apply HSTS to all subdomains
 SECURE_HSTS_PRELOAD = True  # Enable HTTP Strict Transport Security (HSTS)
