@@ -26,4 +26,4 @@ jobs:
                   context: .
                   file: ./Dockerfile
                   push: true
-                  tags: omarderwy/TrackIt-App-Backend:latest
+                  tags: omarderwy/trackIt-app-backend:latest
