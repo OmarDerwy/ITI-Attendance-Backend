@@ -47,8 +47,9 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Apply HSTS to all subdomains
 SECURE_HSTS_PRELOAD = True  # Enable HTTP Strict Transport Security (HSTS)
 
 
-ALLOWED_HOSTS = ['iti-attendance-backend-production-f813.up.railway.app','localhost', '127.0.0.1']
+# ALLOWED_HOSTS = ['iti-attendance-backend-production-f813.up.railway.app','localhost', '127.0.0.1']
 
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
