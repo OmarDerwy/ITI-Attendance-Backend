@@ -59,7 +59,6 @@ RUN pip install --no-cache-dir hf_xet huggingface_hub[hf_xet]
 
 # Copy the rest of the application code into the container
 COPY . /app/
-RUN rm /app/.env
 # Create directories for image uploads if they don't exist
 RUN mkdir -p /app/found_item_images /app/lost_item_images
 
