@@ -66,4 +66,4 @@ RUN mkdir -p /app/logs /app/found_item_images /app/lost_item_images
 EXPOSE 8000
 
 # Define the command to run your app using Uvicorn for ASGI support
-CMD ["uvicorn", "core.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "core.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
