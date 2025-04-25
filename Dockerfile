@@ -60,7 +60,7 @@ RUN pip install --no-cache-dir hf_xet huggingface_hub[hf_xet]
 # Copy the rest of the application code into the container
 COPY . /app/
 # Create directories for image uploads if they don't exist
-RUN mkdir -p /app/found_item_images /app/lost_item_images
+RUN mkdir -p /app/logs /app/found_item_images /app/lost_item_images
 
 # Make port 8000 available to the world outside this container
 EXPOSE 8000

@@ -20,26 +20,34 @@ import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-
+# log file path
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
-DEBUG = False
-# security settings
-CSRF_COOKIE_SECURE = True # Set to True in production and False in development
-SESSION_COOKIE_SECURE = True # Set to True in production and False in development
+DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
+# security settings (True in production, False in development)
+CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "True") == "True"
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "True") == "True"
+SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True") == "True"
+CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "True") == "True"
+CORS_ALLOWED_ORIGINS = [ 
+    # "https://your-frontend-domain.com", # Add frontend domain here when deployed
+    "iti-attendance-backend-production-f813.up.railway.app",
+]
+
+
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_SSL_REDIRECT = False  # Redirect all HTTP requests to HTTPS  # Set to True in production and False in development
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Apply HSTS to all subdomains
 SECURE_HSTS_PRELOAD = True  # Enable HTTP Strict Transport Security (HSTS)
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['iti-attendance-backend-production-f813.up.railway.app','localhost', '127.0.0.1']
 
 
 # Application definition
@@ -78,7 +86,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'core.urls'
 #Update CORS_ALLOW_ALL_ORIGINS after frontend deployment
-CORS_ALLOW_ALL_ORIGINS = True  
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     "authorization",
@@ -180,6 +187,7 @@ USE_I18N = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -279,12 +287,12 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
         },
-        'file': {
-            'level': 'INFO',  # Save detailed logs to file
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/app.log'),
-            'formatter': 'verbose',
-        },
+        # 'file': {
+        #     'level': 'INFO',  # Save detailed logs to file
+        #     'class': 'logging.FileHandler',
+        #     'filename': os.path.join(BASE_DIR, 'logs/app.log'),
+        #     'formatter': 'verbose',
+        # },
     },
     'root': {
         'handlers': ['console', 'file'],
