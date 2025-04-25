@@ -13,8 +13,7 @@ from django.db.models import Count, Subquery, OuterRef, Q, IntegerField, Value, 
 from ..models import PermissionRequest, ApplicationSetting, Track
 
 # Load environment variables
-load_dotenv()
-API_BASE_URL = os.getenv('API_BASE_URL')
+API_BASE_URL = os.environ.get('API_BASE_URL')
 
 class CustomPagination(PageNumberPagination):
     page_size = 10  # 10 students per page

@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 import os
 
 
-load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 DEBUG = False
 # security settings
@@ -34,7 +33,7 @@ CSRF_COOKIE_SECURE = True # Set to True in production and False in development
 SESSION_COOKIE_SECURE = True # Set to True in production and False in development
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_SSL_REDIRECT = True  # Redirect all HTTP requests to HTTPS  # Set to True in production and False in development
+SECURE_SSL_REDIRECT = False  # Redirect all HTTP requests to HTTPS  # Set to True in production and False in development
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Apply HSTS to all subdomains
 SECURE_HSTS_PRELOAD = True  # Enable HTTP Strict Transport Security (HSTS)
@@ -110,8 +109,8 @@ ASGI_APPLICATION = 'core.asgi.application'
 
 # DATABASE_ROUTERS = ['core.database_routers.UserDatabaseRouter']
 
-tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
-database_name = os.getenv("DATABASE_NAME", "neondb")
+tmpPostgres = urlparse(os.environ.get("DATABASE_URL"))
+database_name = os.environ.get("DATABASE_NAME", "neondb")
 
 # Extract the endpoint ID from the hostname (e.g., ep-orange-rain-a2usbm66)
 endpoint_id = tmpPostgres.hostname.split('.')[0] if tmpPostgres.hostname else None
@@ -156,12 +155,12 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # email settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv('EMAIL_HOST')
-EMAIL_PORT = os.getenv('EMAIL_PORT')
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS') == 'True'
-EMAIL_HOST_USER = os.getenv('EMAIL_USER')
-DEFAULT_FROM_EMAIL = os.getenv('EMAIL_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD')
+EMAIL_HOST = os.environ.get('EMAIL_HOST')
+EMAIL_PORT = os.environ.get('EMAIL_PORT')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_USER')
+DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/

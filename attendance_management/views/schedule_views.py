@@ -10,8 +10,7 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
-API_BASE_URL = os.getenv('API_BASE_URL')
+API_BASE_URL = os.environ.get('API_BASE_URL')
 
 # Add custom pagination class
 class CustomPagination(PageNumberPagination):
