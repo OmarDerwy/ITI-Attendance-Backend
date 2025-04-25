@@ -268,51 +268,51 @@ CHANNEL_LAYERS = {
     },
 }
 
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {module} {message}',
-#             'style': '{',
-#         },
-#         'simple': {
-#             'format': '{message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'console': {
-#             'level': 'WARNING',  # Show only warnings and above in production console
-#             'class': 'logging.StreamHandler',
-#             'formatter': 'simple',
-#         },
-#         # 'file': {
-#         #     'level': 'INFO',  # Save detailed logs to file
-#         #     'class': 'logging.FileHandler',
-#         #     'filename': os.path.join(BASE_DIR, 'logs/app.log'),
-#         #     'formatter': 'verbose',
-#         # },
-#     },
-#     'root': {
-#         'handlers': ['console', 'file'],
-#         'level': 'WARNING',  # Root logger only captures warnings and errors
-#     },
-#     'loggers': {
-#         'django': {
-#             'handlers': ['console', 'file'],
-#             'level': 'INFO',  # Include HTTP requests and other events
-#             'propagate': False,
-#         },
-#         'lost_and_found_system': {
-#             'handlers': ['console', 'file'],
-#             'level': 'INFO',  # Lower in production; use DEBUG in dev
-#             'propagate': False,
-#         },
-#         'attendance_management': {
-#             'handlers': ['console', 'file'],
-#             'level': 'INFO',
-#             'propagate': False,
-#         },
-#     },
-# }
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'WARNING',  # Show only warnings and above in production console
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        # 'file': {
+        #     'level': 'INFO',  # Save detailed logs to file
+        #     'class': 'logging.FileHandler',
+        #     'filename': os.path.join(BASE_DIR, 'logs/app.log'),
+        #     'formatter': 'verbose',
+        # },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',  # Root logger only captures warnings and errors
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Include HTTP requests and other events
+            'propagate': False,
+        },
+        'lost_and_found_system': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Lower in production; use DEBUG in dev
+            'propagate': False,
+        },
+        'attendance_management': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
