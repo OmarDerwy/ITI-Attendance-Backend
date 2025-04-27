@@ -35,8 +35,9 @@ SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "True") == "True
 SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True") == "True"
 CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "True") == "True"
 CORS_ALLOWED_ORIGINS = [ 
-    # "https://your-frontend-domain.com", # Add frontend domain here when deployed
-    "iti-attendance-backend-production-f813.up.railway.app",
+    'http://trackit-frontend-vhgcgj-6044d6-129-159-8-224.traefik.me/login',
+    "http://trackit-djangobackend-qvqtqz-58d84a-129-159-8-224.traefik.me",
+    'https://trackit-app-backend-532324418812.europe-west9.run.app'
 ]
 
 

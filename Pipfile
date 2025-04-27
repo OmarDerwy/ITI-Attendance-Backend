@@ -28,6 +28,7 @@ opencv-python-headless = "==4.11.0.86"
 torch = "==2.6.0"
 sentence-transformers = "~=4.0.1"
 python-dateutil = "*"
+wheel = "*"
 
 [dev-packages]
 django-shortcuts = "*"
