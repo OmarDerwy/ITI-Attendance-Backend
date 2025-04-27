@@ -1,36 +1,19 @@
-import os
-from dotenv import load_dotenv
 from rest_framework import viewsets, status
 from ..models import Student
 from ..serializers import StudentSerializer, StudentWithWarningSerializer
 from core import permissions
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
-from django.db.models import Prefetch
-from django.db.models import Count, Subquery, OuterRef, Q, IntegerField, Value, Case, When, F
+from django.db.models import Count, Subquery, OuterRef, Q
 from ..models import PermissionRequest, ApplicationSetting, Track
 
-# Load environment variables
-load_dotenv()
-API_BASE_URL = os.getenv('API_BASE_URL')
-
-class CustomPagination(PageNumberPagination):
-    page_size = 10  # 10 students per page
-    def get_paginated_response(self, data):
-        response = super().get_paginated_response(data)
-        for key in ['next', 'previous']:
-            link = response.data.get(key)
-            if link:
-                response.data[key] = link.replace(API_BASE_URL, "")
-        return response
 
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.select_related('user', 'track').all()  # Updated to use Student
     serializer_class = StudentSerializer
     permission_classes = [permissions.IsStudentOrAboveUser]  # CHECK if too much permissions to student
-    pagination_class = CustomPagination  # added custom pagination
+
 
     # url to call this action is 
     @action(detail=False, methods=['get'], url_path='by-user-id')

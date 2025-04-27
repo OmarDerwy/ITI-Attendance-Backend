@@ -1,32 +1,13 @@
 from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.utils.timezone import now
-from rest_framework.pagination import PageNumberPagination
 from ..models import Schedule, Track
 from ..serializers import ScheduleSerializer
 from core import permissions
-import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-API_BASE_URL = os.getenv('API_BASE_URL')
 
-# Add custom pagination class
-class CustomPagination(PageNumberPagination):
-    def get_paginated_response(self, data):
-        response = super().get_paginated_response(data)
-        for key in ['next', 'previous']:
-            link = response.data.get(key)
-            if link:
-                response.data[key] = link.replace(API_BASE_URL, "")
-        return response
 
 class ScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ScheduleSerializer
     permission_classes = [permissions.IsStudentOrAboveUser]
-    pagination_class = CustomPagination  # added custom pagination
 
     def get_queryset(self):
         user = self.request.user
