@@ -2,13 +2,11 @@ from datetime import timezone
 from . import models, serializers
 from rest_framework import viewsets, permissions
 from core import permissions as core_permissions
-from rest_framework.generics import RetrieveUpdateAPIView
 from django.contrib.auth.models import Group
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .helpers import getGroupIDFromNames
 from django.core.mail import send_mail
-from django.utils.crypto import get_random_string
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
@@ -17,7 +15,6 @@ from django.db.models import Q
 # import from attendance_management
 from attendance_management import models as attend_models
 import os
-from dotenv import load_dotenv
 
 # Load environment variables
 FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:8080')
