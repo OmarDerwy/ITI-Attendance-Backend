@@ -279,13 +279,13 @@ LOGGING = {
             'style': '{',
         },
         'simple': {
-            'format': '{message}',
+            'format': '{levelname}: {message}',
             'style': '{',
         },
     },
     'handlers': {
         'console': {
-            'level': 'WARNING',  # Show only warnings and above in production console
+            'level': 'INFO',  # Changed from WARNING to INFO to show similarity calculations
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
         },
@@ -298,7 +298,7 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'WARNING',  # Root logger only captures warnings and errors
+        'level': 'INFO',  # Changed from WARNING to INFO
     },
     'loggers': {
         'django': {
@@ -308,7 +308,7 @@ LOGGING = {
         },
         'lost_and_found_system': {
             'handlers': ['console'],
-            'level': 'INFO',  # Lower in production; use DEBUG in dev
+            'level': 'DEBUG',  # Changed from INFO to DEBUG to show all lost & found logs
             'propagate': False,
         },
         'attendance_management': {
