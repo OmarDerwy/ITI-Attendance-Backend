@@ -1,125 +1,143 @@
 erDiagram
     User {
-        string id
-        string name
-        string role_id FK
-        string student_info_id FK
+        int id PK
         string email
-        string phone
-        string password_hash
+        string phone_number
+        string first_name
+        string last_name
+        string slug_name
+        boolean is_banned
+        string photo_url
+        string password
     }
-    Notification {
-        string id
-        string msg
-        string system_type
-        string status
-        datetime created_at
-        datetime updated_at
-    }
-    Attendance_record {
-        string id
-        datetime check_in_time
-        datetime check_out_time
-        float long
-        float lat
-        string status
-        string student_id FK
-        string schedule_id FK
-    }
-    %% geofence {
-    %%     string id
-    %%     string name
-    %%     float long
-    %%     float lat
-    %%     float radius
-    %% }
-    track {
-        string id
+    Branch {
+        int id PK
         string name
-        string supervisor_id FK
-        string branch_id FK
-        datetime created_at
-    }
-    lost_item {
-        string id
-        string name
-        string desc
-        string status
-        string place
-        datetime lost_at
-        string category
-        string image_url
-        boolean is_returned
-    }
-    found_item {
-        string id
-        string name
-        string desc
-        string status
-        string place
-        datetime found_at
-        string category
-        string image_url
-        boolean is_returned
-    }
-    matching_record {
-        string match_id
-        float similarity_score
-        string lost_item_id FK
-        string found_item FK
-        string status
-    }
-    role {
-        string id
-        string name
-    }
-    schedule {
-        string id
-        string title
-        string description
-        datetime start_time
-        datetime end_time
-        string course_id FK
-        boolean is_online
-        string geofence_id FK
-    }
-    Course {
-        string id
-        string name
-        string instructor_id FK
-        string description
-        datetime created_at
-    }
-    Student_info{
-        string id
-        string track_id FK
-        string laptop_uuid
-        string phone_uuid
-    }
-    branch{
-        string id
-        float long
-        float lat
+        float latitude
+        float longitude
         string location_url
         float radius
     }
+    Track {
+        int id PK
+        string name
+        int supervisor_id FK
+        int intake
+        date start_date
+        string description
+        int default_branch_id FK
+        string program_type
+    }
+    Schedule {
+        int id PK
+        int track_id FK
+        string name
+        date created_at
+        int custom_branch_id FK
+        boolean is_shared
+    }
+    Session {
+        int id PK
+        int track_id FK
+        int schedule_id FK
+        string title
+        string instructor
+        datetime start_time
+        datetime end_time
+        string session_type
+    }
+    Student {
+        int id PK
+        int user_id FK
+        int track_id FK
+        string phone_uuid
+        string laptop_uuid
+        boolean is_checked_in
+    }
+    AttendanceRecord {
+        int id PK
+        int student_id FK
+        int schedule_id FK
+        datetime check_in_time
+        datetime check_out_time
+        string status
+    }
+    PermissionRequest {
+        int id PK
+        int student_id FK
+        string request_type
+        string reason
+        string status
+        int schedule_id FK
+        datetime adjusted_time
+        datetime created_at
+        datetime updated_at
+    }
+    LostItem {
+        int item_id PK
+        string name
+        string description
+        string status
+        string place
+        datetime lost_at
+        string image
+        int user_id FK
+    }
+    FoundItem {
+        int item_id PK
+        string name
+        string description
+        string status
+        string place
+        datetime found_at
+        string image
+        int user_id FK
+    }
+    MatchedItem {
+        int match_id PK
+        int lost_item_id FK
+        int found_item_id FK
+        float similarity_score
+        datetime created_at
+        datetime confirmed_at
+        string status
+    }
+    Notification {
+        int id PK
+        int user_id FK
+        string message
+        boolean is_read
+        datetime created_at
+        int matched_item_id FK
+    }
 
-    role ||--o{ User : "has"
-    User ||--|| Student_info : "has"
-    track ||--|{ Student_info : "enrolled in"
-    %% User }|--|| branch : "belongs to"
-    track }|--|| branch : "part of"
-    track ||--|| User : "supervises"
-    User ||--o{ Course : "instructs"
+    %% Relationships
+    User ||--o{ Track : "supervises"
+    User ||--o{ LostItem : "loses"
+    User ||--o{ FoundItem : "finds"
     User ||--o{ Notification : "receives"
-    User ||--o{ Attendance_record : "checks in/out"
-    User ||--o{ lost_item : "loses"
-    User ||--o{ found_item : "finds"
-    lost_item ||--o{ matching_record : "matches"
-    found_item ||--o{ matching_record : "matches"
-    %% schedule ||--|| track : "belongs to"
-    %% schedule ||--|| geofence : "has location"
-    Attendance_record }|--|| schedule : "for session"
-    Course ||--o{ schedule : "has sessions"
-    track ||--o{ Course : "contains"
-    %% we might want to make track - course relationship manytomany for courses that include many tracks such as soft skills and such
+    User ||--|| Student : "is"
+    Track ||--o{ Schedule : "has"
+    Track ||--o{ Student : "enrolls"
+    Track ||--o{ Session : "has"
+    Track ||--|| Branch : "default"
+    Schedule ||--o{ Session : "has"
+    Schedule ||--o{ AttendanceRecord : "for"
+    Schedule ||--o{ PermissionRequest : "for"
+    Schedule ||--|| Track : "belongs to"
+    Schedule ||--|| Branch : "custom"
+    Session ||--|| Schedule : "belongs to"
+    Student ||--o{ AttendanceRecord : "has"
+    Student ||--o{ PermissionRequest : "requests"
+    Student ||--|| Track : "enrolled in"
+    Student ||--|| User : "profile"
+    AttendanceRecord ||--|| Student : "for"
+    AttendanceRecord ||--|| Schedule : "for"
+    PermissionRequest ||--|| Student : "by"
+    PermissionRequest ||--|| Schedule : "for"
+    LostItem ||--o{ MatchedItem : "matched"
+    FoundItem ||--o{ MatchedItem : "matched"
+    MatchedItem ||--|| LostItem : "lost"
+    MatchedItem ||--|| FoundItem : "found"
+    Notification ||--|| User : "for"
+    Notification ||--|| MatchedItem : "about"
