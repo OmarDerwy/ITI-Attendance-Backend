@@ -1111,7 +1111,7 @@ class AttendanceViewSet(viewsets.ViewSet):
 
         formatted_data = [
         {
-        "student": record.student.user.first_name + " " + record.student.user.last_name,
+        "student": f"{record.student.user.first_name or ''} {record.student.user.last_name or ''}".strip(),
         "date": record.schedule.created_at.strftime("%b %d, %Y"),
         "reason": PermissionRequest.objects.filter(
             student=record.student,
