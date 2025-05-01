@@ -657,8 +657,11 @@ class AttendanceViewSet(viewsets.ViewSet):
             )
             num_schedules = schedules.count()
 
-            # Calculate expected attendance records
-            expected_attendance_count = total_students * num_schedules
+            # Calculate expected attendance count by aggregating per track
+            expected_attendance_count = sum(
+                Student.objects.filter(track=track).count() * Schedule.objects.filter(track=track, created_at__range=(start_date, end_date)).count()
+                for track in tracks
+            )
 
             # Count actual attendance records with check-ins
             actual_attendance_count = AttendanceRecord.objects.filter(
@@ -692,107 +695,120 @@ class AttendanceViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['GET'], url_path='attendance-trends', permission_classes=[IsSupervisorOrAboveUser])
     def get_attendance_trends(self, request):
-        """
-        Get attendance trends (daily, weekly, and monthly).
-        - Supervisors see trends for tracks they manage.
-        - Admins see trends for all tracks.
-        Optional filters:
-        - 'track_id': Filter by a specific track.
-        - 'branch_id': Filter by a specific branch.
-        """
         try:
             user = request.user
-            is_admin = user.is_staff
-            
-            # Get filter parameters
+            user_groups = list(user.groups.values_list('name', flat=True))
+            is_admin = 'admin' in user_groups
+
             track_id = request.query_params.get('track_id')
-            branch_id = request.query_params.get('branch_id')
-
-            # Base queryset for AttendanceRecord
-            attendance_query = AttendanceRecord.objects.filter(check_in_time__isnull=False)
-
-            # Determine tracks based on user role
+            branch_id = request.query_params.get('branch_id') 
             if is_admin:
-                # Admin sees all tracks unless filtered
                 tracks_query = Track.objects.all()
+                if branch_id:
+                    tracks_query = tracks_query.filter(default_branch_id=branch_id)
+
+                if not tracks_query.exists():
+                    return Response({"status": "info", "message": "No tracks found for this branch."}, status=status.HTTP_200_OK)
             else:
                 # Supervisor sees only their tracks
                 tracks_query = Track.objects.filter(supervisor=user)
-                if not tracks_query.exists():
-                    return Response({
-                        "status": "error",
-                        "message": "You are not assigned as a supervisor to any track."
-                    }, status=status.HTTP_403_FORBIDDEN)
 
-            # Apply track filter if provided
             if track_id:
-                try:
-                    # Ensure the track exists and the user has permission (if supervisor)
-                    track = tracks_query.get(id=track_id)
-                    attendance_query = attendance_query.filter(student__track=track)
-                except Track.DoesNotExist:
+                tracks_query = tracks_query.filter(id=track_id)
+                if not tracks_query.exists():
                     return Response({
                         "status": "error",
                         "message": "The specified track does not exist or is not managed by you."
                     }, status=status.HTTP_404_NOT_FOUND)
-            else:
-                # If no specific track, filter by the user's allowed tracks
-                attendance_query = attendance_query.filter(student__track__in=tracks_query)
 
-            # Apply branch filter if provided
-            if branch_id:
-                try:
-                    branch = Branch.objects.get(id=branch_id)
-                    # Filter attendance records based on the schedule's branch
-                    attendance_query = attendance_query.filter(schedule__custom_branch=branch)
-                except Branch.DoesNotExist:
-                    return Response({
-                        "status": "error",
-                        "message": "The specified branch does not exist."
-                    }, status=status.HTTP_404_NOT_FOUND)
+            # Calculate date ranges
+            today = timezone.now().date()
+            thirty_days_ago = today - timedelta(days=30)
+            four_weeks_ago = today - timedelta(weeks=4)
 
-            # Calculate trends using the filtered attendance_query
-            # Daily trends
-            daily_trends = attendance_query.annotate(
-                date=TruncDate('schedule__created_at')
-            ).values('date').annotate(
-                attended=Count('id')
-            ).order_by('date')
-
-            # Weekly trends
-            weekly_trends = attendance_query.annotate(
-                week=TruncWeek('schedule__created_at')
-            ).values('week').annotate(
-                attended=Count('id')
-            ).order_by('week')
-
-            # Monthly trends
-            monthly_trends = attendance_query.annotate(
-                month=TruncMonth('schedule__created_at')
-            ).values('month').annotate(
-                attended=Count('id')
-            ).order_by('month')
-                
-            response_data = {
-                "daily_trends": list(daily_trends),
-                "weekly_trends": list(weekly_trends),
-                "monthly_trends": list(monthly_trends)
+            # Get track students count
+            track_students = {
+                track.id: Student.objects.filter(track=track).count()
+                for track in tracks_query
             }
 
-            # Add filter information to the response
-            filter_info = {}
-            if branch_id:
-                filter_info["branch_id"] = branch_id
-                filter_info["branch_name"] = branch.name # branch object is available if branch_id was valid
-            if track_id:
-                filter_info["track_id"] = track_id
-                filter_info["track_name"] = track.name # track object is available if track_id was valid
-                
-            if filter_info:
-                response_data["filters_applied"] = filter_info
+            # Get attendance data in a single query
+            schedule_data = (
+                Schedule.objects.filter(
+                    track__in=tracks_query,
+                    created_at__gte=four_weeks_ago,
+                    created_at__lte=today
+                )
+                .values('track__id', 'track__name', 'created_at')
+                .annotate(
+                    attended=Count('attendance_records', filter=Q(attendance_records__check_in_time__isnull=False)),
+                    total_students=Count('track__students')
+                )
+                .order_by('created_at')
+            )
+
+            # Process daily trends and weekly aggregation
+            daily_trends = []
+            weekly_data = {}
+
+            for record in schedule_data:
+                date = record['created_at']
+                track_name = record['track__name']
+                attended = record['attended']
+                expected = record['total_students']
+
+                # Daily trends - only include data from the last 30 days
+                if date >= thirty_days_ago and date <= today:
+                    daily_trends.append({
+                        "date": date,
+                        "track": track_name,
+                        "attended": attended,
+                        "expected": expected
+                    })
+
+                # Weekly trends - aggregate all tracks per week
+                if date >= four_weeks_ago and date <= today:
+                    week_num = date.isocalendar()[1]
+                    if track_id:
+                        # If filtering by track, keep track name in the key
+                        week_key = (week_num, track_name)
+                    else:
+                        # If showing all tracks, aggregate by week only
+                        week_key = week_num
+                        
+                    if week_key not in weekly_data:
+                        weekly_data[week_key] = {'attended': 0, 'expected': 0}
+                    weekly_data[week_key]['attended'] += attended
+                    weekly_data[week_key]['expected'] += expected
+
+            # Convert weekly data to list format
+            weekly_trends = []
+            for week_key, data in sorted(weekly_data.items()):
+                if isinstance(week_key, tuple):
+                    # Data for specific track
+                    week_num, track_name = week_key
+                    weekly_trends.append({
+                        "week": week_num,
+                        "track": track_name,
+                        "attended": data['attended'],
+                        "expected": data['expected']
+                    })
+                else:
+                    # Aggregated data for all tracks
+                    weekly_trends.append({
+                        "week": week_key,
+                        "track": "All Tracks",
+                        "attended": data['attended'],
+                        "expected": data['expected']
+                    })
+
+            response_data = {
+                "daily_trends": sorted(daily_trends, key=lambda x: x['date']),
+                "weekly_trends": weekly_trends
+            }
 
             return Response(response_data, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.error(f"Error fetching attendance trends: {str(e)}")
             return Response({
@@ -1090,43 +1106,55 @@ class AttendanceViewSet(viewsets.ViewSet):
         Query Parameters:
             track_id (optional): Filter results for a specific track
         """
-        user = request.user
-        tracks = Track.objects.filter(supervisor=user)
-        today = date.today()
-        track_id = request.query_params.get('track_id')
-        if track_id:
-            tracks = tracks.filter(id=track_id)
+        try:
+            user = request.user
+            tracks = Track.objects.filter(supervisor=user)
+            today = date.today()
+            track_id = request.query_params.get('track_id')
+            if track_id:
+                tracks = tracks.filter(id=track_id)
 
-        # Define statuses that count as absence
-        reportable_statuses = {
-            'absent', 'excused',
-        }
+            # Get all absences with a single optimized query
+            absence_records = (
+                AttendanceRecord.objects
+                .filter(
+                    schedule__created_at=today,
+                    student__track__in=tracks,
+                    status__in=['absent', 'excused']
+                )
+                .select_related('student__user', 'schedule')
+                .prefetch_related(
+                    Prefetch(
+                        'schedule__permission_requests',
+                        queryset=PermissionRequest.objects.filter(
+                            status='approved'
+                        ),
+                        to_attr='active_permissions'
+                    )
+                )
+            )
 
-        # Filter today's attendance records for the given track and absence statuses
-        absence_records = AttendanceRecord.objects.filter(
-        schedule__created_at=today,  # Ensures filtering by today's date
-        student__track__in=tracks,
-        status__in=reportable_statuses
-    ).order_by('-schedule__created_at')
+            # Process records in batches
+            formatted_data = []
+            batch_size = 100
+            
+            for i in range(0, len(absence_records), batch_size):
+                batch = absence_records[i:i + batch_size]
+                for record in batch:
+                    formatted_data.append({
+                        "student": f"{record.student.user.first_name or ''} {record.student.user.last_name or ''}".strip(),
+                        "date": record.schedule.created_at.strftime("%b %d, %Y"),
+                        "reason": record.schedule.active_permissions[0].reason if record.schedule.active_permissions else "no reason found",
+                        "status": record.status,
+                    })
 
-        formatted_data = [
-        {
-        "student": record.student.user.first_name + " " + record.student.user.last_name,
-        "date": record.schedule.created_at.strftime("%b %d, %Y"),
-        "reason": PermissionRequest.objects.filter(
-            student=record.student,
-            schedule=record.schedule
-        ).first().reason if PermissionRequest.objects.filter(
-            student=record.student,
-            schedule=record.schedule
-        ).exists() else "no reason found",
-        "status": record.status,
-        }
-        for record in absence_records
-]
-
-
-        return Response(formatted_data)
+            return Response(formatted_data)
+        except Exception as e:
+            logger.error(f"Error fetching recent absences: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     
     @action(detail=False, methods=["get"], url_path="calendar")
