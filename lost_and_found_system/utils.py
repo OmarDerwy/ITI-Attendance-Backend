@@ -186,10 +186,9 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
     # Initialize variables for other similarity metrics
     caption_similarity = 0
     enhanced_text_similarity = 0
-    image_similarity = 0
     
     if lost_item.image and found_item.image:
-        logger.info("Both items have images. Performing image-based similarity calculations.")
+        logger.info("Both items have images. Performing image-based caption generation.")
         
         # Get captions from images
         lost_caption = generate_image_caption(lost_item.image)
@@ -219,11 +218,6 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
         else:
             logger.info("Couldn't generate captions for one or both images. Using only base text similarity.")
             text_similarity = base_text_similarity
-            
-        # Also calculate direct visual similarity as a backup/complement
-        logger.info("Calculating direct image similarity (structural + color)...")
-        image_similarity = calculate_image_similarity(lost_item.image, found_item.image)
-        logger.info(f"DIRECT IMAGE SIMILARITY: {image_similarity:.4f}")
     else:
         logger.info("One or both items do not have images. Using only text similarity.")
         text_similarity = base_text_similarity
@@ -234,22 +228,18 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
         combined_similarity = text_similarity
         logger.info(f"FINAL SIMILARITY SCORE: {combined_similarity:.4f} (100% text similarity)")
     else:
-        # With images, use a weighted combination of all similarities
-        # Adjust weights based on what proves most effective for your use case
-        text_weight = 0.5
-        caption_weight = 0.3
-        image_weight = 0.2
+        # With images, use a weighted combination without direct image similarity
+        text_weight = 0.6
+        caption_weight = 0.4
         
         text_component = text_weight * text_similarity
         caption_component = caption_weight * caption_similarity
-        image_component = image_weight * image_similarity
         
-        combined_similarity = text_component + caption_component + image_component
+        combined_similarity = text_component + caption_component
         
         logger.info(f"SIMILARITY COMPONENTS:")
         logger.info(f"- Text Similarity: {text_similarity:.4f} × {text_weight} = {text_component:.4f}")
         logger.info(f"- Caption Similarity: {caption_similarity:.4f} × {caption_weight} = {caption_component:.4f}")
-        logger.info(f"- Image Similarity: {image_similarity:.4f} × {image_weight} = {image_component:.4f}")
         logger.info(f"FINAL SIMILARITY SCORE: {combined_similarity:.4f}")
 
     # Create a MatchedItem if similarity exceeds threshold
