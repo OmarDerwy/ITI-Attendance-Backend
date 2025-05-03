@@ -1425,13 +1425,13 @@ class AttendanceViewSet(viewsets.ViewSet):
             
             # Count attendance data
             total_days = past_records.count()
-            total_attended = past_records.filter(check_in_time__isnull=False).count()
-            total_absent = total_days - total_attended
+            total_attended = past_records.filter(Q(check_in_time__isnull=False) | Q(status='attended')).count()
+            
             
             # Get excused and unexcused absences
             unexcused_absences = student.get_unexcused_absence_count()
             excused_absences = student.get_excused_absence_count()
-            
+            total_absent = unexcused_absences + excused_absences
             # Calculate percentage
             attendance_percentage = (total_attended / total_days) * 100 if total_days > 0 else 0
             
