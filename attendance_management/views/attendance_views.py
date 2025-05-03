@@ -1,10 +1,10 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 import math
 import logging
-from attendance_management.models import AttendanceRecord, Schedule, Branch, Student
+from attendance_management.models import AttendanceRecord, Schedule, Student
 from django.shortcuts import get_object_or_404
 from users.models import CustomUser
 from django.utils import timezone
@@ -13,7 +13,6 @@ from ..models import PermissionRequest, Track, Session
 from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents, AttendanceRecordSerializerForSupervisors
 from django.db.models import Count, Q, Prefetch
 from datetime import timedelta, date, datetime
-from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from collections import OrderedDict
 
 import calendar
