@@ -59,33 +59,50 @@ class LostItemViewSet(viewsets.ModelViewSet):
         # Save the lost item
         lost_item = serializer.save(user=self.request.user)
         logger.info(f"LostItem created: {lost_item}")
-
-        # Match the lost item with all found items
-        found_items = FoundItem.objects.filter(status=ItemStatusChoices.FOUND)
-        logger.info(f"Matching LostItem with {found_items.count()} FoundItems")
         
-        for found_item in found_items:
-            match_result = match_lost_and_found_items(lost_item, found_item)
+        # Process matching asynchronously
+        # Import here to avoid circular imports
+        from django.db import transaction
+        import threading
+        
+        def background_matching():
+            logger.info(f"Starting background matching for LostItem: {lost_item.name}")
+            # Match the lost item with all found items
+            found_items = FoundItem.objects.filter(status=ItemStatusChoices.FOUND)
+            logger.info(f"Matching LostItem with {found_items.count()} FoundItems")
             
-            if match_result:
-                logger.info(f"Match created: {match_result}")
-                
-                # Update status after match is created - use refresh_from_db to ensure we have latest data
-                lost_item.refresh_from_db()
-                found_item.refresh_from_db()
-                
-                # Update both items to MATCHED status
-                lost_item.status = ItemStatusChoices.MATCHED
-                found_item.status = ItemStatusChoices.MATCHED
-                
-                # Force save with update_fields to ensure only status is updated
-                lost_item.save(update_fields=['status'])
-                found_item.save(update_fields=['status'])
-                
-                logger.info(f"Updated status of Lost item '{lost_item.name}' to {lost_item.status}")
-                logger.info(f"Updated status of Found item '{found_item.name}' to {found_item.status}")
-            else:
-                logger.info(f"No match found between LostItem '{lost_item.name}' and FoundItem '{found_item.name}'")
+            with transaction.atomic():
+                for found_item in found_items:
+                    match_result = match_lost_and_found_items(lost_item, found_item)
+                    
+                    if match_result:
+                        logger.info(f"Match created: {match_result}")
+                        
+                        # Update status after match is created - use refresh_from_db to ensure we have latest data
+                        lost_item.refresh_from_db()
+                        found_item.refresh_from_db()
+                        
+                        # Update both items to MATCHED status
+                        lost_item.status = ItemStatusChoices.MATCHED
+                        found_item.status = ItemStatusChoices.MATCHED
+                        
+                        # Force save with update_fields to ensure only status is updated
+                        lost_item.save(update_fields=['status'])
+                        found_item.save(update_fields=['status'])
+                        
+                        logger.info(f"Updated status of Lost item '{lost_item.name}' to {lost_item.status}")
+                        logger.info(f"Updated status of Found item '{found_item.name}' to {found_item.status}")
+                    else:
+                        logger.info(f"No match found between LostItem '{lost_item.name}' and FoundItem '{found_item.name}'")
+            
+            logger.info(f"Background matching completed for LostItem: {lost_item.name}")
+        
+        # Start the matching process in a background thread
+        matching_thread = threading.Thread(target=background_matching)
+        matching_thread.daemon = True  # Thread will exit when main program exits
+        matching_thread.start()
+        
+        logger.info(f"Item created and background matching initiated, returning response immediately")
 
 class FoundItemViewSet(viewsets.ModelViewSet):
     """
@@ -110,32 +127,49 @@ class FoundItemViewSet(viewsets.ModelViewSet):
         found_item = serializer.save(user=self.request.user)
         logger.info(f"FoundItem created: {found_item}")
         
-        # Match the found item with all lost items
-        lost_items = LostItem.objects.filter(status=ItemStatusChoices.LOST)
-        logger.info(f"Matching FoundItem with {lost_items.count()} LostItems")
+        # Process matching asynchronously
+        # Import here to avoid circular imports
+        from django.db import transaction
+        import threading
         
-        for lost_item in lost_items:
-            match_result = match_lost_and_found_items(lost_item, found_item)
+        def background_matching():
+            logger.info(f"Starting background matching for FoundItem: {found_item.name}")
+            # Match the found item with all lost items
+            lost_items = LostItem.objects.filter(status=ItemStatusChoices.LOST)
+            logger.info(f"Matching FoundItem with {lost_items.count()} LostItems")
             
-            if match_result:
-                logger.info(f"Match created: {match_result}")
-                
-                # Update status after match is created - use refresh_from_db to ensure we have latest data
-                lost_item.refresh_from_db()
-                found_item.refresh_from_db()
-                
-                # Update both items to MATCHED status
-                lost_item.status = ItemStatusChoices.MATCHED
-                found_item.status = ItemStatusChoices.MATCHED
-                
-                # Force save with update_fields to ensure only status is updated
-                lost_item.save(update_fields=['status'])
-                found_item.save(update_fields=['status'])
-                
-                logger.info(f"Updated status of Lost item '{lost_item.name}' to {lost_item.status}")
-                logger.info(f"Updated status of Found item '{found_item.name}' to {found_item.status}")
-            else:
-                logger.info(f"No match found between LostItem '{lost_item.name}' and FoundItem '{found_item.name}'")
+            with transaction.atomic():
+                for lost_item in lost_items:
+                    match_result = match_lost_and_found_items(lost_item, found_item)
+                    
+                    if match_result:
+                        logger.info(f"Match created: {match_result}")
+                        
+                        # Update status after match is created - use refresh_from_db to ensure we have latest data
+                        lost_item.refresh_from_db()
+                        found_item.refresh_from_db()
+                        
+                        # Update both items to MATCHED status
+                        lost_item.status = ItemStatusChoices.MATCHED
+                        found_item.status = ItemStatusChoices.MATCHED
+                        
+                        # Force save with update_fields to ensure only status is updated
+                        lost_item.save(update_fields=['status'])
+                        found_item.save(update_fields=['status'])
+                        
+                        logger.info(f"Updated status of Lost item '{lost_item.name}' to {lost_item.status}")
+                        logger.info(f"Updated status of Found item '{found_item.name}' to {found_item.status}")
+                    else:
+                        logger.info(f"No match found between LostItem '{lost_item.name}' and FoundItem '{found_item.name}'")
+            
+            logger.info(f"Background matching completed for FoundItem: {found_item.name}")
+        
+        # Start the matching process in a background thread
+        matching_thread = threading.Thread(target=background_matching)
+        matching_thread.daemon = True  # Thread will exit when main program exits
+        matching_thread.start()
+        
+        logger.info(f"Item created and background matching initiated, returning response immediately")
 
     @action(detail=False, methods=['GET'])
     def my_found_items(self, request):
