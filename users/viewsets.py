@@ -2,13 +2,11 @@ from datetime import timezone
 from . import models, serializers
 from rest_framework import viewsets, permissions
 from core import permissions as core_permissions
-from rest_framework.generics import RetrieveUpdateAPIView
 from django.contrib.auth.models import Group
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .helpers import getGroupIDFromNames
 from django.core.mail import send_mail
-from django.utils.crypto import get_random_string
 from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
@@ -17,13 +15,11 @@ from django.db.models import Q
 # import from attendance_management
 from attendance_management import models as attend_models
 import os
-from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
-FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:8080')
-ACTIVATION_PATH = os.getenv('ACTIVATION_PATH', '/activate/')
-RESET_PASSWORD_PATH = os.getenv('RESET_PASSWORD_PATH', '/reset-password/')
+FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:8080')
+ACTIVATION_PATH = os.environ.get('ACTIVATION_PATH', '/activate/')
+RESET_PASSWORD_PATH = os.environ.get('RESET_PASSWORD_PATH', '/reset-password/')
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = models.CustomUser.objects.all().order_by('id').prefetch_related('groups', 'student_profile')
@@ -112,8 +108,8 @@ class UserViewSet(viewsets.ModelViewSet):
         send_mail(
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.getenv('EMAIL_USER'),
-            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
+            from_email=os.environ.get('EMAIL_USER'),
+            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
         )
         
         # Serialize and return the created user
@@ -154,8 +150,8 @@ class UserViewSet(viewsets.ModelViewSet):
             send_mail(
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.getenv('EMAIL_USER'),
-            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
+            from_email=os.environ.get('EMAIL_USER'),
+            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
         )
 
         # Update first and last name
@@ -363,8 +359,8 @@ class ResetPassword(APIView):
         send_mail(
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{reset_url}",
-            from_email=os.getenv('EMAIL_USER'),
-            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
+            from_email=os.environ.get('EMAIL_USER'),
+            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
         )
         print(f"Password reset link for {email}: {reset_url}")
         return Response({'message': 'Password reset email sent successfully.',
@@ -480,8 +476,8 @@ class StudentViewSet(viewsets.ModelViewSet):
         send_mail(
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.getenv('EMAIL_USER'),
-            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
+            from_email=os.environ.get('EMAIL_USER'),
+            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
         )
         
         # Serialize and return the created user
@@ -516,8 +512,8 @@ class StudentViewSet(viewsets.ModelViewSet):
         send_mail(
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.getenv('EMAIL_USER'),
-            recipient_list=[os.getenv('RECIPIENT_EMAIL')],
+            from_email=os.environ.get('EMAIL_USER'),
+            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
         )
         return Response({
             'confirmation_link': create_password_url
@@ -587,8 +583,8 @@ class BulkCreateStudents(APIView):
             send_mail(
                 subject="Account Activation",
                 message=f"Click the link below to activate your account:\n{create_password_url}",
-                from_email=os.getenv('EMAIL_USER'),
-                recipient_list=[os.getenv('RECIPIENT_EMAIL')],
+                from_email=os.environ.get('EMAIL_USER'),
+                recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
             )
 
 
