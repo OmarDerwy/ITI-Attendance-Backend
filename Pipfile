@@ -5,11 +5,9 @@ name = "pypi"
 
 [packages]
 django = "*"
-django-extensions = "*"
 faker = "*"
 djoser = "*"
 djangorestframework = "*"
-drf-spectacular = "*"
 djangorestframework-simplejwt = "*"
 channels = "*"
 channels-redis = "*"
@@ -33,6 +31,8 @@ uvicorn = {extras = ["standard"], version = "*"}
 [dev-packages]
 django-shortcuts = "*"
 django-debug-toolbar = "*"
+drf-spectacular = "*"
+django-extensions = "*"
 
 [requires]
 python_version = "3.13"
