@@ -26,7 +26,7 @@ class ApplicationSetting(models.Model):
         """
         key = 'unexcused_absence_threshold_intensive' if program_type == 'intensive' else 'unexcused_absence_threshold'
         setting = cls.objects.filter(key=key).first()
-        return int(setting.value) if setting else 3
+        return int(setting.value) if setting else 2  # Changed default from 3 to 5
 
     @classmethod
     def get_excused_absence_threshold(cls, program_type='nine_months'):
@@ -36,4 +36,4 @@ class ApplicationSetting(models.Model):
         """
         key = 'excused_absence_threshold_intensive' if program_type == 'intensive' else 'excused_absence_threshold'
         setting = cls.objects.filter(key=key).first()
-        return int(setting.value) if setting else 3 
+        return int(setting.value) if setting else 5  # Changed default from 3 to 5

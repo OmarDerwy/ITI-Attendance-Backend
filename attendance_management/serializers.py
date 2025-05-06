@@ -289,28 +289,28 @@ class PermissionRequestSerializer(serializers.ModelSerializer):
 
 # Updated StudentWithWarningSerializer
 class StudentWithWarningSerializer(serializers.ModelSerializer):
-    first_name = serializers.CharField(source='user.first_name', read_only=True)
-    last_name = serializers.CharField(source='user.last_name', read_only=True)
-    email = serializers.CharField(source='user.email', read_only=True)
-    track_name = serializers.CharField(source='track.name', read_only=True)
+    email = serializers.EmailField(source='user.email')
+    name = serializers.SerializerMethodField()
+    track_name = serializers.CharField(source='track.name')
     warning_type = serializers.SerializerMethodField()
+    unexcused = serializers.IntegerField(source='unexcused_count')
+    excused = serializers.IntegerField(source='excused_count')
 
     class Meta:
         model = Student
-        fields = [
-            'id',
-            'first_name',
-            'last_name',
-            'email',
-            'track_name',
-            'warning_type',
-            'unexcused_absences',
-            'excused_absences',
-        ]
+        fields = ['id', 'name', 'email', 'track_name', 'warning_type', 'unexcused', 'excused']
+
+    def get_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}"
 
     def get_warning_type(self, obj):
-        # Attach request to student for ApplicationSetting cache if needed
-        request = self.context.get('request')
-        if request:
-            obj._request = request
-        return obj.warning_status
+        from .models import ApplicationSetting
+        program_type = obj.track.program_type
+        unexcused_threshold = ApplicationSetting.get_unexcused_absence_threshold(program_type)
+        excused_threshold = ApplicationSetting.get_excused_absence_threshold(program_type)
+
+        if obj.unexcused_count >= unexcused_threshold:
+            return "Unexcused"
+        elif obj.excused_count >= excused_threshold:
+            return "Excused"
+        return None
