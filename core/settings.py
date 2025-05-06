@@ -36,6 +36,7 @@ CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "True") == "Tr
 CORS_ALLOWED_ORIGINS = [ 
     'http://trackit-frontend-vhgcgj-6044d6-129-159-8-224.traefik.me',
     "http://trackit-djangobackend-qvqtqz-58d84a-129-159-8-224.traefik.me",
+    "trackit-djangobackend-ai-imp-n5v3ur-83552d-129-159-8-224.traefik.me",
     'https://trackit-app-backend-532324418812.europe-west9.run.app'
 ]
 
