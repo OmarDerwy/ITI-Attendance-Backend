@@ -1,10 +1,10 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 import math
 import logging
-from attendance_management.models import AttendanceRecord, Schedule, Branch, Student
+from attendance_management.models import AttendanceRecord, Schedule, Student
 from django.shortcuts import get_object_or_404
 from users.models import CustomUser
 from django.utils import timezone
@@ -13,7 +13,6 @@ from ..models import PermissionRequest, Track, Session
 from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents, AttendanceRecordSerializerForSupervisors
 from django.db.models import Count, Q, Prefetch
 from datetime import timedelta, date, datetime
-from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from collections import OrderedDict
 
 import calendar
@@ -1426,13 +1425,13 @@ class AttendanceViewSet(viewsets.ViewSet):
             
             # Count attendance data
             total_days = past_records.count()
-            total_attended = past_records.filter(check_in_time__isnull=False).count()
-            total_absent = total_days - total_attended
+            total_attended = past_records.filter(Q(check_in_time__isnull=False) | Q(status='attended')).count()
+            
             
             # Get excused and unexcused absences
             unexcused_absences = student.get_unexcused_absence_count()
             excused_absences = student.get_excused_absence_count()
-            
+            total_absent = unexcused_absences + excused_absences
             # Calculate percentage
             attendance_percentage = (total_attended / total_days) * 100 if total_days > 0 else 0
             
