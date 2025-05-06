@@ -1,0 +1,22 @@
+meta {
+  name: check in
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://0.0.0.0:8000/api/v1/attendance/check-out/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "user_id": 149,
+    "uuid": "test-device-uuid",
+    "latitude": 30.0216657,
+    "longitude": 31.7054312
+  
+   
+  }
+}

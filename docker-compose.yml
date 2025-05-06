@@ -1,0 +1,29 @@
+# Docker Compose file for testing the Docker image
+version: '3'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=1
+      # Add other environment variables your application needs
+      # - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
+    # If you need a database, uncomment these lines
+    # depends_on:
+    #   - db
+  
+  # Uncomment if you need a database service
+  # db:
+  #   image: postgres:13
+  #   environment:
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_DB=postgres
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+# Uncomment if you're using database volumes
+# volumes:
+#   postgres_data:

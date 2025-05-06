@@ -1,0 +1,44 @@
+meta {
+  name: rejectRequests (supervisor)
+  type: http
+  seq: 3
+}
+
+post {
+  url: http://localhost:8000/api/v1/attendance/permission-requests/:id/reject
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+script:pre-request {
+  const {faker} = require('@faker-js/faker')
+  const generateUsers = () => {
+    return new Promise((resolve) => {
+      let user_list = []
+      for (let i = 0; i < 5; i++) {
+        let user = {}
+        const email = faker.internet.email()
+        const first_name = faker.person.firstName
+        const last_name = faker.person.lastName
+  
+        user = {
+          email,
+          first_name,
+          last_name
+        }
+        user_list.push(user)
+      }
+      resolve(user_list)
+    })
+  }
+  
+  generateUsers().then((user_list) => {
+    req.setBody({
+      users: user_list
+    })
+  })
+}

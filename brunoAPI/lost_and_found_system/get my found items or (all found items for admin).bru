@@ -1,18 +1,22 @@
 meta {
   name: get my found items or (all found items for admin)
   type: http
-  seq: 2
+  seq: 1
 }
 
 get {
-  url: http://127.0.0.1:8000/api/v1/lost-and-found/found-items/
+  url: http://0.0.0.0:8000/api/v1/lost-and-found/found-items/?search=life
   body: json
   auth: inherit
 }
 
+params:query {
+  search: life
+}
+
 body:json {
   {
-    "name":"bottle",
+    "name":"phone",
     "description":"black",
     "place":"IOT Lab"
   }

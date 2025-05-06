@@ -1,14 +1,19 @@
 from django.test import TestCase
 from django.utils.timezone import now
-from users.models import CustomUser
-from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices
+from django.contrib.auth import get_user_model
+from .models import LostItem, FoundItem, MatchedItem, ItemStatusChoices, LostAndFoundItem
+from channels.testing import WebsocketCommunicator
+from asgiref.sync import sync_to_async
+from core.asgi import application
 
+CustomUser = get_user_model()
 
 class LostAndFoundTestCase(TestCase):
     def setUp(self):
         self.user = CustomUser.objects.create_user(
-            email='testuser@example.com',  
-            password='password123'
+            email='test@example.com',
+            password='testpass123',
+            groups=['student']
         )
 
         # Create a lost item
@@ -94,3 +99,49 @@ class LostAndFoundTestCase(TestCase):
         self.assertEqual(str(self.lost_item), "Lost Wallet (Lost)")
         self.assertEqual(str(self.found_item), "Found Wallet (Found)")
         self.assertEqual(str(self.matched_item), "Match: Lost Wallet ↔ Found Wallet")
+
+
+class NotificationTestCase(TestCase):
+    async def test_notification_sent_on_match(self):
+        # Create a test user
+        user = await sync_to_async(CustomUser.objects.create_user)(
+            email='testuser@example.com', password='password123'
+        )
+
+        # Create a lost item
+        lost_item = await sync_to_async(LostItem.objects.create)(
+            name="Lost Wallet",
+            description="A black leather wallet",
+            place="Library",
+            user=user
+        )
+
+        # Create a found item
+        found_item = await sync_to_async(FoundItem.objects.create)(
+            name="Found Wallet",
+            description="A black leather wallet found near the library",
+            place="Library",
+            user=user
+        )
+
+        # Connect to WebSocket
+        communicator = WebsocketCommunicator(application, f"/ws/notifications/")
+        communicator.scope['user'] = user
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        # Create a matched item with a similarity score > 70
+        await sync_to_async(MatchedItem.objects.create)(
+            lost_item=lost_item,
+            found_item=found_item,
+            similarity_score=85.0,
+            status=MatchedItem.MatchingResult.SUCCEEDED
+        )
+
+        # Receive notification
+        response = await communicator.receive_json_from()
+        self.assertEqual(response["title"], "Item Matched!")
+        self.assertIn("Lost Wallet", response["body"])
+
+        # Disconnect
+        await communicator.disconnect()

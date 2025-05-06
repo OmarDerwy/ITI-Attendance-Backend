@@ -1,0 +1,11 @@
+meta {
+  name: decline_match
+  type: http
+  seq: 7
+}
+
+post {
+  url: http://localhost:8000/api/v1/lost-and-found/matched-items/{matched_item.id}/decline-match/
+  body: none
+  auth: inherit
+}

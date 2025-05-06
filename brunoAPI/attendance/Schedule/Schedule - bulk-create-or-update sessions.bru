@@ -1,0 +1,28 @@
+meta {
+  name: Schedule - bulk-create-or-update sessions
+  type: http
+  seq: 3
+}
+
+post {
+  url: http://localhost:8000/api/v1/attendance/sessions/bulk-create-or-update/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  [
+      {
+            "title": "Session 1",
+             "instructor": "Instructor 1",
+             "track": 1,
+            "session_type": "offline",
+           "start_time": "2023-10-01T10:00:00Z",
+            "end_time": "2023-10-01T12:00:00Z",
+            "branch":   {"id":1 , "name":""},
+           "schedule_date": "2023-10-01",
+        "isOnline": false
+              } 
+  
+      ]
+}

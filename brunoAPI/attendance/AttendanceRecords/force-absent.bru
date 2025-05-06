@@ -1,0 +1,11 @@
+meta {
+  name: force-absent
+  type: http
+  seq: 5
+}
+
+patch {
+  url: http://localhost:8000/api/v1/attendance/402/reset-attendance/
+  body: none
+  auth: inherit
+}

@@ -1,20 +1,24 @@
 from django.urls import path, include
 from rest_framework import routers
-from .viewsets import UserViewSet, GroupViewSet
-from .views import clerk_webhook
+from .viewsets import UserViewSet, GroupViewSet, ResetPassword, BulkCreateStudents, UserActivateView, StudentViewSet, ResetPasswordConfirmation, TokenBlacklistViewAll
+from rest_framework_simplejwt.views import TokenBlacklistView
 
+# from .views import bulk_create_users
 router = routers.DefaultRouter()
 router.register(r'groups', GroupViewSet, basename='group')
 router.register(r'users', UserViewSet, basename='user')
+router.register(r'students', StudentViewSet, basename='student')
 
 urlpatterns = [
     path('', include(router.urls), name='user-list'),
     path('auth/', include('djoser.urls.jwt'), name='auth-jwt'),
     path('auth/', include('djoser.urls'), name='auth'),
-
-    # Clerk webhook endpoint
-    path('webhooks/clerk/', clerk_webhook, name='webhook'),
-
+    path ('reset/', ResetPassword.as_view(), name='reset'),
+    path ('reset-confirmation/', ResetPasswordConfirmation.as_view(), name='reset-confirmation'),
+    path('bulkcreate/', BulkCreateStudents.as_view(), name='bulk-create-users'),
+    path('activate/', UserActivateView.as_view(), name='activate-user'),
+    path('auth/jwt/blacklist/', TokenBlacklistView.as_view(), name='token-blacklist'),
+    path('auth/jwt/blacklist/all/', TokenBlacklistViewAll.as_view(), name='token-blacklist-all'),
 
     # path('api-auth/', include('rest_framework.urls', namespace='rest_framework'), name='rest_framework'),
     # path('auth/', include('djoser.urls.authtoken'), name='auth-token'),

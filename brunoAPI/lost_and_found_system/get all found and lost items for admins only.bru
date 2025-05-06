@@ -1,11 +1,11 @@
 meta {
   name: get all found and lost items for admins only
   type: http
-  seq: 3
+  seq: 2
 }
 
 get {
-  url: http://localhost:8000/api/v1/lost-and-found/
+  url: http://localhost:8000/api/v1/lost-and-found/lost-items/
   body: none
   auth: inherit
 }

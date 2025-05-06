@@ -13,27 +13,44 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 from datetime import timedelta
 from urllib.parse import urlparse
-from dotenv import load_dotenv
 import os
 
 
-load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-
+# log file path
+LOG_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9j41$k*nn8e$2^(1jcm^5c68cj1aofg$#ag-*p-3y9ya0k1d8u'
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
+# security settings (True in production, False in development)
+CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "True") == "True"
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "True") == "True"
+SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True") == "True"
+CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "True") == "True"
+CORS_ALLOWED_ORIGINS = [ 
+    'http://trackit-frontend-vhgcgj-6044d6-129-159-8-224.traefik.me',
+    "http://trackit-djangobackend-qvqtqz-58d84a-129-159-8-224.traefik.me",
+    "http://trackit-djangobackend-ai-imp-n5v3ur-83552d-129-159-8-224.traefik.me",
+    'https://trackit-app-backend-532324418812.europe-west9.run.app'
+]
 
-ALLOWED_HOSTS = ['60fe-45-244-111-111.ngrok-free.app', 'localhost', '127.0.0.1', '5d87-45-244-111-111.ngrok-free.app', '*.ngrok-free.app']
 
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Apply HSTS to all subdomains
+SECURE_HSTS_PRELOAD = True  # Enable HTTP Strict Transport Security (HSTS)
+
+
+# ALLOWED_HOSTS = ['iti-attendance-backend-production-f813.up.railway.app','localhost', '127.0.0.1']
+
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -44,17 +61,22 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'djoser',
     'drf_spectacular',
     'users',
     'lost_and_found_system',
     'django_extensions',
+    'channels',
 
+    'attendance_management',
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -65,6 +87,12 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'core.urls'
+#Update CORS_ALLOW_ALL_ORIGINS after frontend deployment
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "authorization",
+    "content-type",
+]
 
 TEMPLATES = [
     {
@@ -83,31 +111,43 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'core.wsgi.application'
-
+ASGI_APPLICATION = 'core.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 # DATABASE_ROUTERS = ['core.database_routers.UserDatabaseRouter']
 
-tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
+tmpPostgres = urlparse(os.environ.get("DATABASE_URL"))
+database_name = os.environ.get("DATABASE_NAME", "neondb")
+
+# Extract the endpoint ID from the hostname (e.g., ep-orange-rain-a2usbm66)
+endpoint_id = tmpPostgres.hostname.split('.')[0] if tmpPostgres.hostname else None
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': tmpPostgres.path.replace('/', ''),
+        'NAME': database_name,
         'USER': tmpPostgres.username,
         'PASSWORD': tmpPostgres.password,
         'HOST': tmpPostgres.hostname,
-        'PORT': 5432,
-    }
+        'PORT': tmpPostgres.port or '5432',
+        'OPTIONS': {
+            'sslmode': 'require',  # Ensure SSL is required
+            'options': f'endpoint={endpoint_id}' if endpoint_id else None # Pass endpoint ID directly
+        },
+    },
+    'local': { # for local testing sqlite3
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    },
 }
 
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [
+AUTH_PASSWORD_VALIDATORS = [ 
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
     },
@@ -122,23 +162,34 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# email settings
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.environ.get('EMAIL_HOST')
+EMAIL_PORT = os.environ.get('EMAIL_PORT')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_USER')
+DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD')
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+USE_TZ = True
+
+TIME_ZONE = 'Africa/Cairo'
 
 USE_I18N = True
 
-USE_TZ = True
+
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -156,14 +207,14 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
+    'PAGE_SIZE': os.environ.get('PAGE_SIZE', 10),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 AUTHENTICATION_BACKENDS = [
     "users.backends.ClerkAuthBackend",
     "djoser.auth_backends.LoginFieldBackend",
-    'django.contrib.auth.backends.ModelBackend',
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 DJOSER = {
@@ -180,7 +231,7 @@ DJOSER = {
         'user_create': 'users.serializers.UserCreateSerializer',
         'user': 'users.serializers.CustomUserSerializer',
         'user_delete': 'djoser.serializers.UserDeleteSerializer',
-        'current_user': 'users.serializers.CustomSelfUserSerializer',
+        'current_user': 'users.serializers.CustomUserSerializer',
     },
     'USER_ID_FIELD': 'id',
     'PERMISSIONS': {
@@ -202,10 +253,9 @@ DJOSER = {
 }
 
 SIMPLE_JWT = {
-   'AUTH_HEADER_TYPES': ('Bearer',),
-   'ACCESS_TOKEN_LIFETIME': timedelta(weeks=1),
-   'REFRESH_TOKEN_LIFETIME': timedelta(weeks=1),
-   'SIGNING_KEY': os.getenv('CLERK_PUBLISHABLE_KEY')
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(weeks=1),
 }
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Attendance Project API',
@@ -213,4 +263,59 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     # OTHER SETTINGS
+}
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',  # Changed from WARNING to INFO to show similarity calculations
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        # 'file': {
+        #     'level': 'INFO',  # Save detailed logs to file
+        #     'class': 'logging.FileHandler',
+        #     'filename': os.path.join(BASE_DIR, 'logs/app.log'),
+        #     'formatter': 'verbose',
+        # },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',  # Changed from WARNING to INFO
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Include HTTP requests and other events
+            'propagate': False,
+        },
+        'lost_and_found_system': {
+            'handlers': ['console'],
+            'level': 'DEBUG',  # Changed from INFO to DEBUG to show all lost & found logs
+            'propagate': False,
+        },
+        'attendance_management': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }
