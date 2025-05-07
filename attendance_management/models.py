@@ -12,6 +12,7 @@ class Branch(models.Model):
     longitude = models.FloatField()
     location_url = models.URLField(blank=True, null=True)
     radius = models.FloatField(validators=[MinValueValidator(0)])
+    branch_manager = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='branches', null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -21,6 +22,7 @@ class Track(models.Model):
     supervisor = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='tracks')
     intake = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(254)])
     start_date = models.DateField()
+    is_active = models.BooleanField(default=True)
     description = models.TextField()
     default_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='tracks')
     PROGRAM_CHOICES = [
@@ -62,6 +64,7 @@ class Session(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     session_type = models.CharField(max_length=10, choices=COURSE_CHOICES, default='offline')
+    room = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
         return f"{self.title}"
