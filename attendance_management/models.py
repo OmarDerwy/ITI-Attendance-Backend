@@ -7,24 +7,42 @@ from django.conf import settings
 from .settings_models import ApplicationSetting
 
 class Branch(models.Model):
+    # ForeignKey from Track - related_name: tracks
+    # ForeignKey from Schedule - related_name: schedules
     name = models.CharField(max_length=255, unique=True)
     latitude = models.FloatField()
     longitude = models.FloatField()
     location_url = models.URLField(blank=True, null=True)
     radius = models.FloatField(validators=[MinValueValidator(0)])
-    branch_manager = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='branches', null=True, blank=True)
+    branch_manager = models.ForeignKey(
+        CustomUser,  # <-- ForeignKey to CustomUser (users.models)
+        on_delete=models.CASCADE, related_name='branches', null=True, blank=True
+    )  # Each branch has a branch_manager (CustomUser)
+    coordinators = models.ManyToManyField(
+        CustomUser,  # <-- ManyToMany to CustomUser (users.models)
+        related_name='coordinators', blank=True
+    )  # Each branch can have multiple coordinators (CustomUser)
 
     def __str__(self):
         return self.name
     
 class Track(models.Model):
+    # ForeignKey from Session - related_name: sessions
+    # ForeignKey from Student - related_name: students
+    # ForeignKey from Schedule - related_name: schedules
     name = models.CharField(max_length=255)
-    supervisor = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='tracks')
+    supervisor = models.ForeignKey(
+        CustomUser,  # <-- ForeignKey to CustomUser (users.models)
+        on_delete=models.CASCADE, related_name='tracks'
+    )  # Each track has a supervisor (CustomUser)
     intake = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(254)])
     start_date = models.DateField()
     is_active = models.BooleanField(default=True)
     description = models.TextField()
-    default_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='tracks')
+    default_branch = models.ForeignKey(
+        Branch,  # <-- ForeignKey to Branch (attendance_management.models)
+        on_delete=models.CASCADE, related_name='tracks'
+    )  # Each track has a default_branch (Branch)
     PROGRAM_CHOICES = [
         ('intensive', 'Intensive Program'),
         ('nine_months', '9 months'),
@@ -35,10 +53,19 @@ class Track(models.Model):
         return self.name
 
 class Schedule(models.Model):
-    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='Schedules')
+    # ForeignKey from Session - related_name: sessions
+    # ForeignKey from AttendanceRecord - related_name: attendance_records
+    # ForeignKey from PermissionRequest - related_name: permission_requests
+    track = models.ForeignKey(
+        Track,  # <-- ForeignKey to Track (attendance_management.models)
+        on_delete=models.CASCADE, related_name='schedules'
+    )  # Each schedule belongs to a track
     name = models.CharField(max_length=255)
     created_at = models.DateField(db_index=True) 
-    custom_branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='Schedules')
+    custom_branch = models.ForeignKey(
+        Branch,  # <-- ForeignKey to Branch (attendance_management.models)
+        on_delete=models.CASCADE, related_name='schedules'
+    )  # Each schedule can have a custom_branch (Branch)
     is_shared = models.BooleanField(default=False)
 
     class Meta:
@@ -91,12 +118,19 @@ class Schedule(models.Model):
         }
 
 class Session(models.Model):
-    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='schedules')
+    # ForeignKey from nothing (leaf model)
+    track = models.ForeignKey(
+        Track,  # <-- ForeignKey to Track (attendance_management.models)
+        on_delete=models.CASCADE, related_name='sessions'
+    )  # Each session belongs to a track
     COURSE_CHOICES = [
         ('online', 'Online'),
         ('offline', 'Offline'),
     ]
-    schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE, related_name='sessions')
+    schedule = models.ForeignKey(
+        Schedule,  # <-- ForeignKey to Schedule (attendance_management.models)
+        on_delete=models.CASCADE, related_name='sessions'
+    )  # Each session belongs to a schedule
     title = models.CharField(max_length=255)
     instructor = models.CharField(max_length=255, null=True, blank=True)
     start_time = models.DateTimeField()
@@ -108,8 +142,16 @@ class Session(models.Model):
         return f"{self.title}"
 
 class Student(models.Model):  # Renamed from StudentInfo
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='student_profile')
-    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='students')
+    # ForeignKey from AttendanceRecord - related_name: attendance_records
+    # ForeignKey from PermissionRequest - related_name: permission_requests
+    user = models.OneToOneField(
+        CustomUser,  # <-- OneToOne to CustomUser (users.models)
+        on_delete=models.CASCADE, related_name='student_profile'
+    )  # Each student is linked to a CustomUser
+    track = models.ForeignKey(
+        Track,  # <-- ForeignKey to Track (attendance_management.models)
+        on_delete=models.CASCADE, related_name='students'
+    )  # Each student belongs to a track
     phone_uuid = models.CharField(max_length=100, blank=True, null=True)
     laptop_uuid = models.CharField(max_length=100, blank=True, null=True)
     is_checked_in = models.BooleanField(default=False)
@@ -249,6 +291,7 @@ class Student(models.Model):  # Renamed from StudentInfo
         return Student._permission_requests_cache
 
 class AttendanceRecord(models.Model):
+    # ForeignKey from nothing (leaf model)
     STATUS_CHOICES = [
         ('attended', 'Attended'),
         ('absent', 'Absent'),
@@ -265,8 +308,14 @@ class AttendanceRecord(models.Model):
         ('pending', 'Pending'),
         ('rejected', 'Rejected'),
     ]
-    student = models.ForeignKey('Student', on_delete=models.CASCADE, related_name='attendance_records')
-    schedule = models.ForeignKey('Schedule', on_delete=models.CASCADE, related_name='attendance_records')
+    student = models.ForeignKey(
+        'Student',  # <-- ForeignKey to Student (attendance_management.models)
+        on_delete=models.CASCADE, related_name='attendance_records'
+    )  # Each attendance record is for a student
+    schedule = models.ForeignKey(
+        'Schedule',  # <-- ForeignKey to Schedule (attendance_management.models)
+        on_delete=models.CASCADE, related_name='attendance_records'
+    )  # Each attendance record is for a schedule
     check_in_time = models.DateTimeField(blank=True, null=True)
     check_out_time = models.DateTimeField(blank=True, null=True)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='absent')
@@ -284,6 +333,7 @@ class AttendanceRecord(models.Model):
         return f"AttendanceRecord(Student: {self.student}, Schedule: {self.schedule})"
 
 class PermissionRequest(models.Model):
+    # ForeignKey from nothing (leaf model)
     REQUEST_TYPES = [
         ('early_leave', 'Early Leave'),
         ('late_check_in', 'Late Check-In'),
@@ -295,11 +345,17 @@ class PermissionRequest(models.Model):
         ('rejected', 'Rejected'),
     ]
 
-    student = models.ForeignKey('Student', on_delete=models.CASCADE, related_name='permission_requests')
+    student = models.ForeignKey(
+        'Student',  # <-- ForeignKey to Student (attendance_management.models)
+        on_delete=models.CASCADE, related_name='permission_requests'
+    )  # Each permission request is for a student
     request_type = models.CharField(max_length=20, choices=REQUEST_TYPES)
     reason = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
-    schedule = models.ForeignKey('Schedule', on_delete=models.CASCADE, related_name='permission_requests', null=True, blank=True)
+    schedule = models.ForeignKey(
+        'Schedule',  # <-- ForeignKey to Schedule (attendance_management.models)
+        on_delete=models.CASCADE, related_name='permission_requests', null=True, blank=True
+    )  # Each permission request can be for a schedule
     adjusted_time = models.DateTimeField(blank=True, null=True) 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

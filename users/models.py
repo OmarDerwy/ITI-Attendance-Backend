@@ -84,18 +84,8 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
             
         super().save(*args, **kwargs)
 
-    # def save(self, *args, **kwargs):
-    #     super().save(*args, **kwargs)  # Save the user first
-    #     if not self.groups.exists():  # If no groups are assigned
-    #         student_group, created = Group.objects.get_or_create(name='student')
-    #         self.groups.add(student_group)
-    #     else:
-    #         # Handle single string for groups and convert to list
-    #         if isinstance(self.groups, str):
-    #             group_names = [self.groups]
-    #             group_objs = Group.objects.filter(name__in=group_names)
-    #             self.groups.set(group_objs)
-
-    #     if 'admin' in self.groups.values_list('name', flat=True):
-    #         self.is_staff = True
-    #         self.is_superuser = True
+    # ForeignKey/ManyToMany/OneToOne connections from attendance_management.models:
+    # - Branch.branch_manager: ForeignKey to CustomUser (each Branch has a branch_manager)
+    # - Branch.coordinators: ManyToMany to CustomUser (each Branch can have multiple coordinators)
+    # - Track.supervisor: ForeignKey to CustomUser (each Track has a supervisor)
+    # - Student.user: OneToOne to CustomUser (each Student is linked to a CustomUser)
