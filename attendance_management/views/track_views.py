@@ -19,7 +19,8 @@ class TrackViewSet(viewsets.ModelViewSet):
         if 'admin' in user_groups:
             return queryset
         if 'coordinator' in user_groups:
-            return queryset.filter(default_branch__coordinators=user)
+            coordinator_profile = user.coordinator
+            return queryset.filter(default_branch__coordinators=coordinator_profile)
         if 'supervisor' in user_groups:
             return queryset.filter(supervisor=user)
         return Track.objects.none()  # No access for other users

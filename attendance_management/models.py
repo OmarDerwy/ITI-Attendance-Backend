@@ -9,6 +9,7 @@ from .settings_models import ApplicationSetting
 class Branch(models.Model):
     # ForeignKey from Track - related_name: tracks
     # ForeignKey from Schedule - related_name: schedules
+    # ForeignKey from CoordinatorAssignment - related_name: coordinator
     name = models.CharField(max_length=255, unique=True)
     latitude = models.FloatField()
     longitude = models.FloatField()
@@ -18,14 +19,27 @@ class Branch(models.Model):
         CustomUser,  # <-- ForeignKey to CustomUser (users.models)
         on_delete=models.CASCADE, related_name='branches', null=True, blank=True
     )  # Each branch has a branch_manager (CustomUser)
-    coordinators = models.ManyToManyField(
-        CustomUser,  # <-- ManyToMany to CustomUser (users.models)
-        related_name='coordinators', blank=True
-    )  # Each branch can have multiple coordinators (CustomUser)
 
     def __str__(self):
         return self.name
-    
+
+class Coordinator(models.Model):
+    # OneToOne to CustomUser (each coordinator is assigned to only one branch)
+    user = models.OneToOneField(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='coordinator'
+    )
+    # ForeignKey to Branch (each branch can have multiple coordinators)
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.CASCADE,
+        related_name='coordinators'
+    )
+
+    def __str__(self):
+        return f"Coordinator: {self.user} -> Branch: {self.branch}"
+
 class Track(models.Model):
     # ForeignKey from Session - related_name: sessions
     # ForeignKey from Student - related_name: students

@@ -36,8 +36,16 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
         return self.create_user(email, password, **extra_fields)
 
-class CustomUser(AbstractUser): # FIXME order response for GET users
-
+class CustomUser(AbstractUser):
+    # ForeignKey from Branch - related_name: branches
+    # ForeignKey from Track - related_name: tracks
+    # OneToOne from Student - related_name: student_profile
+    # OneToOne from Coordinator - related_name: coordinator
+    # ForeignKey from Branch (as branch_manager) - related_name: branches
+    # ForeignKey from Track (as supervisor) - related_name: tracks
+    # ForeignKey from LostItem - related_name: lost_items
+    # ForeignKey from FoundItem - related_name: found_items
+    # ForeignKey from Notification - related_name: notifications
     username = None
     email = models.EmailField(unique=True, validators=[validate_email])
     phone_number = models.CharField(max_length=15, blank=True, null=True)
@@ -83,9 +91,3 @@ class CustomUser(AbstractUser): # FIXME order response for GET users
             raise ValidationError(f"User {self.first_name} {self.last_name} already exists.")
             
         super().save(*args, **kwargs)
-
-    # ForeignKey/ManyToMany/OneToOne connections from attendance_management.models:
-    # - Branch.branch_manager: ForeignKey to CustomUser (each Branch has a branch_manager)
-    # - Branch.coordinators: ManyToMany to CustomUser (each Branch can have multiple coordinators)
-    # - Track.supervisor: ForeignKey to CustomUser (each Track has a supervisor)
-    # - Student.user: OneToOne to CustomUser (each Student is linked to a CustomUser)
