@@ -2,9 +2,14 @@ from rest_framework import viewsets
 from ..models import Track
 from ..serializers import TrackSerializer
 from core import permissions
+from rest_framework.decorators import action
+
 
 class TrackViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsSupervisorOrAboveUser]
+    serializer_class = TrackSerializer
+    pagination_class = None 
+
     def get_queryset(self):
         user = self.request.user
         user_groups = user.groups.values_list('name', flat=True)
@@ -24,7 +29,12 @@ class TrackViewSet(viewsets.ModelViewSet):
         if 'supervisor' in user_groups:
             return queryset.filter(supervisor=user)
         return Track.objects.none()  # No access for other users
-
-    
-    serializer_class = TrackSerializer
-    pagination_class = None 
+    @action(detail=True, methods=['patch'], permission_classes=[permissions.IsSupervisorOrAboveUser])
+    def archive_track(self, request, pk=None):
+        """
+        Archive a track.
+        """
+        track = self.get_object()
+        track.is_active = False
+        track.save()
+        return Response({'status': 'Track archived successfully.'}, status=200)
