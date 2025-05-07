@@ -14,6 +14,7 @@ class TrackViewSet(viewsets.ModelViewSet):
         if program_type:
             queryset = queryset.filter(program_type=program_type)
         if is_active:
+            is_active = is_active.lower() == 'true' if is_active else False
             queryset = queryset.filter(is_active=is_active)
         if 'admin' in user_groups:
             return queryset
