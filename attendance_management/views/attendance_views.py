@@ -672,7 +672,7 @@ class AttendanceViewSet(viewsets.ViewSet):
             attendance_percentage = (
                 (actual_attendance_count / expected_attendance_count) * 100
                 if expected_attendance_count > 0 else 0
-)
+            )
 
 
             return Response({
