@@ -23,7 +23,7 @@ class TrackViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_active=is_active)
         if 'admin' in user_groups:
             return queryset
-        if 'coordinator' in user_groups:
+        if 'coordinator' in user_groups or 'branch-manager' in user_groups:
             coordinator_profile = user.coordinator
             return queryset.filter(default_branch__coordinators=coordinator_profile)
         if 'supervisor' in user_groups:
