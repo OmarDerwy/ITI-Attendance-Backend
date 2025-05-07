@@ -412,17 +412,27 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         requestUser = self.request.user
-        requestUserGroups = requestUser.groups.all()
+        requestUserGroups = requestUser.groups.values_list('name', flat=True)
         allUsers = models.CustomUser.objects.all()
         searchParam = self.request.query_params.get('search', None)
         trackParam = self.request.query_params.get('track', None) # Use Only if user is a supervisor
+        isactiveParam = self.request.query_params.get('is_active', None) # Use Only if user is a supervisor
         students = allUsers.filter(groups__name='student') # TODO not all students actually possess the student group, need to fix database later
+        # select_related for performance
+        students = students.select_related('student_profile', 'student_profile__track', 'student_profile__track__default_branch')
         if trackParam and trackParam != 'All':
             track = requestUser.tracks.get(id=trackParam)
             students = allUsers.filter(student_profile__track=track)
         if searchParam:
             students = students.filter(Q(email__icontains=searchParam) | Q(first_name__icontains=searchParam) | Q(last_name__icontains=searchParam)) # TODO consider adding capability for admins to view all students and add them
-        if 'supervisor' in requestUserGroups.values_list('name', flat=True):
+        if isactiveParam:
+            isactiveParam = isactiveParam.lower() == 'true' if isactiveParam else False
+            students = students.filter(student_profile__track__is_active=isactiveParam)
+        if 'coordinator' in requestUserGroups:
+            branch = requestUser.coordinator.branch
+            students = students.filter(student_profile__track__default_branch=branch)
+            return students.order_by('id')
+        if 'supervisor' in requestUserGroups:
             hisTrack = requestUser.tracks.all()
             students = students.filter(student_profile__track__in=hisTrack)
             return students.order_by('id')
