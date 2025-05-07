@@ -133,6 +133,16 @@ class SessionViewSet(viewsets.ModelViewSet):
                         session = None
 
                     if session:  # Update the session if it exists
+                        if custom_branch_id and schedule.custom_branch_id != custom_branch_id:
+                            try:
+                                new_branch = Branch.objects.get(id=custom_branch_id)
+                                schedule.custom_branch = new_branch
+                                schedule.save(update_fields=['custom_branch'])
+                                logger.info(f"Updated schedule {schedule.id} with new branch {custom_branch_id}")
+                            except Branch.DoesNotExist:
+                                logger.error(f"Branch with id {custom_branch_id} not found")
+                                return Response({'error': f'Branch with id {custom_branch_id} not found'}, status=400)
+
                         session.title = title
                         session.instructor = instructor
                         session.start_time = start_time
