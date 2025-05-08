@@ -1,4 +1,3 @@
-
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -57,10 +56,12 @@ class TrackViewSet(viewsets.ModelViewSet):
         - branch_id: ID of the branch to filter tracks
         - start_date: Optional start date for statistics (YYYY-MM-DD)
         - end_date: Optional end date for statistics (YYYY-MM-DD)
+        - is_active: Optional filter for active/inactive tracks (true/false)
         
         Returns:
         - List of tracks with their online/offline statistics
         - Each track includes daily data and monthly summaries
+        - Track details including start_date, intake, supervisor, and description
         """
         branch_id = request.query_params.get('branch_id')
         if not branch_id:
@@ -70,6 +71,7 @@ class TrackViewSet(viewsets.ModelViewSet):
         today = timezone.now().date()
         start_date_str = request.query_params.get('start_date')
         end_date_str = request.query_params.get('end_date')
+        is_active_str = request.query_params.get('is_active')
         
         try:
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else today - timedelta(days=90)
@@ -78,10 +80,17 @@ class TrackViewSet(viewsets.ModelViewSet):
             return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
         
         # Get tracks for the specified branch
-        tracks = Track.objects.filter(
+        tracks_query = Track.objects.filter(
             Q(default_branch_id=branch_id) | 
             Q(schedules__custom_branch_id=branch_id)
-        ).distinct()
+        ).distinct().select_related('supervisor', 'default_branch')
+        
+        # Apply is_active filter if provided
+        if is_active_str is not None:
+            is_active = is_active_str.lower() == 'true'
+            tracks_query = tracks_query.filter(is_active=is_active)
+        
+        tracks = tracks_query
         
         result = []
         
@@ -163,13 +172,28 @@ class TrackViewSet(viewsets.ModelViewSet):
                 online_percentage = round((online_days / total_days) * 100, 2)
                 offline_percentage = round((offline_days / total_days) * 100, 2)
             
-            # Add track data to result
+            # Format supervisor name
+            supervisor_name = None
+            if track.supervisor:
+                supervisor_name = f"{track.supervisor.first_name} {track.supervisor.last_name}"
+            
+            # Format start_date
+            formatted_start_date = track.start_date.strftime('%Y-%m-%d') if track.start_date else None
+            
+            # Add track data to result with additional fields
             result.append({
                 'track_id': track.id,
                 'track_name': track.name,
                 'program_type': track.program_type,
                 'program_type_display': track.get_program_type_display(),
                 'is_active': track.is_active,
+                'start_date': formatted_start_date,
+                'intake': track.intake,
+                'supervisor': supervisor_name,
+                'supervisor_id': track.supervisor.id if track.supervisor else None,
+                'description': track.description,
+                'default_branch': track.default_branch.name if track.default_branch else None,
+                'default_branch_id': track.default_branch.id if track.default_branch else None,
                 'statistics': {
                     'total_days': total_days,
                     'online_days': online_days,
