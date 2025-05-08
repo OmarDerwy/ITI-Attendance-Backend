@@ -17,9 +17,9 @@ from attendance_management import models as attend_models
 import os
 
 # Load environment variables
-FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:8080')
-ACTIVATION_PATH = os.environ.get('ACTIVATION_PATH', '/activate/')
-RESET_PASSWORD_PATH = os.environ.get('RESET_PASSWORD_PATH', '/reset-password/')
+FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:8080/')
+ACTIVATION_PATH = os.environ.get('ACTIVATION_PATH', 'activate/')
+RESET_PASSWORD_PATH = os.environ.get('RESET_PASSWORD_PATH', 'reset-password/')
 
 class AbstractUserViewSet(viewsets.ModelViewSet):
     """
