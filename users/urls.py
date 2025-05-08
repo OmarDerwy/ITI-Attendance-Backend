@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework import routers
-from .viewsets import UserViewSet, GroupViewSet, ResetPassword, BulkCreateStudents, UserActivateView, StudentViewSet, CoordinatorViewSet, ResetPasswordConfirmation, TokenBlacklistViewAll
+from .viewsets import UserViewSet, GroupViewSet, ResetPassword, UserActivateView, StudentViewSet, CoordinatorViewSet, ResetPasswordConfirmation, TokenBlacklistViewAll
 from rest_framework_simplejwt.views import TokenBlacklistView
 
 # from .views import bulk_create_users
@@ -16,7 +16,6 @@ urlpatterns = [
     path('auth/', include('djoser.urls'), name='auth'),
     path ('reset/', ResetPassword.as_view(), name='reset'),
     path ('reset-confirmation/', ResetPasswordConfirmation.as_view(), name='reset-confirmation'),
-    path('bulkcreate/', BulkCreateStudents.as_view(), name='bulk-create-users'),
     path('activate/', UserActivateView.as_view(), name='activate-user'),
     path('auth/jwt/blacklist/', TokenBlacklistView.as_view(), name='token-blacklist'),
     path('auth/jwt/blacklist/all/', TokenBlacklistViewAll.as_view(), name='token-blacklist-all'),
