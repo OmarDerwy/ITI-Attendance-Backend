@@ -468,16 +468,7 @@ class StudentViewSet(AbstractUserViewSet):
         student.is_banned = False
         if student.is_active:
             return Response({'message': 'User is already active.'}, status=400)
-        access_token = AccessToken.for_user(student)
-        create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
-        # For development: print the link
-        print(f"Confirmation link for {student.email}: {create_password_url}")
-        send_mail(
-            subject="Account Activation",
-            message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.environ.get('EMAIL_USER'),
-            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
-        )
+        self._send_confirmation_mail(student)
         return Response({
             'confirmation_link': create_password_url
         })
