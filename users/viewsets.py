@@ -574,7 +574,7 @@ class UserActivateView(APIView):
         if 'student' in user.groups.all().values_list('name', flat=True):
             student_profile = attend_models.Student.objects.get(user=user)
             # check for upcoming schedules and create attendance records for user if they don't exist
-            upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track, start_time__gte=timezone.localtime())
+            upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track).exclude(sessions__end_time__lt=timezone.localtime()).distinct()
             numOfAttenCreated = 0
             for schedule in upcoming_schedules:
                 record, created = attend_models.AttendanceRecord.objects.get_or_create(student=student_profile, schedule=schedule)
