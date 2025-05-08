@@ -311,7 +311,33 @@ class UserViewSet(AbstractUserViewSet):
         
         return Response(serializer.data, status=200)
 
+class CoordinatorViewSet(AbstractUserViewSet):
+    queryset = models.CustomUser.objects.filter(groups__name='coordinator').order_by('id')
+    serializer_class = serializers.CustomUserSerializer
+    permission_classes = [core_permissions.IsBranchManagerOrAboveUser]
 
+    def get_queryset(self):
+        requestUser = self.request.user
+        requestUserGroups = requestUser.groups.values_list('name', flat=True)
+        if 'admin' in requestUserGroups:
+            return self.queryset
+        if 'branch-manager' in requestUserGroups:
+            requestUserBranches = requestUser.branches
+            return self.queryset.filter(coordinator__branch__in=requestUserBranches).order_by('id')
+        return self.queryset.none()
+    def create(self, request, *args, **kwargs):
+        user = super().create(request, *args, **kwargs)
+        coordinator = attend_models.Coordinator.objects.create(user=user)
+        serializer = self.get_serializer(user)
+        return Response({
+            'user': serializer.data,
+            'coordinator_id': coordinator.id
+        }, status=status.HTTP_201_CREATED)
+    def update(self, request, *args, **kwargs): #TODO add things to change in the coordinator profile
+        user = super().update(request, *args, **kwargs)
+        serializer = self.get_serializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
@@ -443,7 +469,7 @@ class StudentViewSet(AbstractUserViewSet):
             'student_profile_id': student_profile.id
         }, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
+    def update(self, request, *args, **kwargs): #TODO add things to change in the student profile
         # Use AbstractUserViewSet's update to update the user and send email if needed
         user = super().update(request, *args, **kwargs)
         serializer = self.get_serializer(user)
@@ -567,7 +593,7 @@ class UserActivateView(APIView):
 
         user.is_active = True
         user.save()
-        if ['student'] in user.groups.all().values_list('name', flat=True):
+        if 'student' in user.groups.all().values_list('name', flat=True):
             student_profile = attend_models.Student.objects.get(user=user)
             # check for upcoming schedules and create attendance records for user if they don't exist
             upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track, start_time__gte=timezone.localtime())
