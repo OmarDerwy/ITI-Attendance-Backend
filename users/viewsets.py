@@ -322,7 +322,7 @@ class CoordinatorViewSet(AbstractUserViewSet):
         if 'admin' in requestUserGroups:
             return self.queryset
         if 'branch-manager' in requestUserGroups:
-            requestUserBranches = requestUser.branches
+            requestUserBranches = requestUser.branches.values_list('id', flat=True)
             return self.queryset.filter(coordinator__branch__in=requestUserBranches).order_by('id')
         return self.queryset.none()
     def create(self, request, *args, **kwargs):
