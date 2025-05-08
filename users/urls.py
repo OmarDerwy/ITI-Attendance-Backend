@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework import routers
-from .viewsets import UserViewSet, GroupViewSet, ResetPassword, BulkCreateStudents, UserActivateView, StudentViewSet, ResetPasswordConfirmation, TokenBlacklistViewAll
+from .viewsets import UserViewSet, GroupViewSet, ResetPassword, BulkCreateStudents, UserActivateView, StudentViewSet, CoordinatorViewSet, ResetPasswordConfirmation, TokenBlacklistViewAll
 from rest_framework_simplejwt.views import TokenBlacklistView
 
 # from .views import bulk_create_users
@@ -8,6 +8,7 @@ router = routers.DefaultRouter()
 router.register(r'groups', GroupViewSet, basename='group')
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'students', StudentViewSet, basename='student')
+router.register(r'coordinators', CoordinatorViewSet, basename='coordinator')
 
 urlpatterns = [
     path('', include(router.urls), name='user-list'),
