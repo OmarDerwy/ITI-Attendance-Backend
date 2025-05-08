@@ -1,4 +1,4 @@
-from datetime import timezone
+from django.utils import timezone
 from . import models, serializers
 from rest_framework import viewsets, permissions, status
 from core import permissions as core_permissions
