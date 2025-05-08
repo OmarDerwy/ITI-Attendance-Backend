@@ -339,14 +339,16 @@ class CoordinatorViewSet(AbstractUserViewSet):
         if 'admin' in requestUserGroups:
             return self.queryset
         if 'branch-manager' in requestUserGroups:
-            requestUserBranches = requestUser.branches.values_list('id', flat=True)
-            return self.queryset.filter(coordinator__branch__in=requestUserBranches).order_by('id')
+            requestUserBranch = requestUser.branch
+            return self.queryset.filter(coordinator__branch=requestUserBranch).order_by('id')
         return self.queryset.none()
     def create(self, request, *args, **kwargs):
+        request_user = self.request.user
+        request_user_branch = request_user.branch
         # Ensure the 'coordinator' group is included in kwargs
         kwargs['groups'] = ['coordinator']
         user = super().create(request, *args, **kwargs)
-        coordinator = attend_models.Coordinator.objects.create(user=user)
+        coordinator = attend_models.Coordinator.objects.create(user=user, branch=request_user_branch)
         serializer = self.get_serializer(user)
         return Response({
             'user': serializer.data,

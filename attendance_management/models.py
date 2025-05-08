@@ -15,9 +15,9 @@ class Branch(models.Model):
     longitude = models.FloatField()
     location_url = models.URLField(blank=True, null=True)
     radius = models.FloatField(validators=[MinValueValidator(0)])
-    branch_manager = models.ForeignKey(
+    branch_manager = models.OneToOneField(
         CustomUser,  # <-- ForeignKey to CustomUser (users.models)
-        on_delete=models.CASCADE, related_name='branches', null=True, blank=True
+        on_delete=models.CASCADE, related_name='branch', null=True, blank=True
     )  # Each branch has a branch_manager (CustomUser)
 
     def __str__(self):
