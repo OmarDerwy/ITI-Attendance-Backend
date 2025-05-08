@@ -37,7 +37,7 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class CustomUser(AbstractUser):
-    # ForeignKey from Branch - related_name: branches
+    # OneToOne from Branch - related_name: branch
     # ForeignKey from Track - related_name: tracks
     # OneToOne from Student - related_name: student_profile
     # OneToOne from Coordinator - related_name: coordinator
