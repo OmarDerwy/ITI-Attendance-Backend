@@ -17,9 +17,9 @@ from attendance_management import models as attend_models
 import os
 
 # Load environment variables
-FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:8080')
-ACTIVATION_PATH = os.environ.get('ACTIVATION_PATH', '/activate/')
-RESET_PASSWORD_PATH = os.environ.get('RESET_PASSWORD_PATH', '/reset-password/')
+FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:8080/')
+ACTIVATION_PATH = os.environ.get('ACTIVATION_PATH', 'activate/')
+RESET_PASSWORD_PATH = os.environ.get('RESET_PASSWORD_PATH', 'reset-password/')
 
 class AbstractUserViewSet(viewsets.ModelViewSet):
     """
@@ -42,8 +42,11 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
             last_name=request.data.get('last_name'),
             phone_number=request.data.get('phone_number'),
         )
-        groups = request.data.get('groups', [])
+        # Allow groups to be overridden via kwargs
+        groups = kwargs.get('groups', request.data.get('groups', []))
         if groups:
+            if isinstance(groups, str):
+                groups = [groups]
             user_group = Group.objects.get(name=groups[0])
             user.groups.add(user_group)
         # Send activation email
@@ -55,7 +58,8 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
         email = request.data.get('email')
         first_name = request.data.get('first_name')
         last_name = request.data.get('last_name')
-        groups = request.data.get('groups', [])
+        # Allow groups to be overridden via kwargs
+        groups = kwargs.get('groups', request.data.get('groups', [])) #TODO of course of groups are changed like this, other models related to previous role need to be removed as well
 
         email_changed = False
         if email and email != user.email:
@@ -69,11 +73,11 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
         if last_name:
             user.last_name = last_name
         if groups:
-            group_ids = getGroupIDFromNames(groups)
-            if isinstance(group_ids, Response):
-                return group_ids
+            if isinstance(groups, str):
+                groups = [groups]
+            user_group = Group.objects.get(name=groups[0])
             user.groups.clear()
-            user.groups.add(*group_ids)
+            user.groups.add(user_group)
         user.save()
         # Send activation email if email changed
         if email_changed:
@@ -90,7 +94,20 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
             from_email=os.environ.get('EMAIL_USER'),
             recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
         )
-
+    def _bulk_create_users(self, request, *args, **kwargs):
+        """
+        Bulk create users from a request.
+        Returns a list of created user objects.
+        """
+        users_data = request.data.get('users', [])
+        if not users_data:
+            raise ValidationError({'error': 'No user data provided'})
+        created_users = []
+        for user_data in users_data:
+            user = self.create(request, *args, **kwargs)
+            created_users.append(user)
+        return created_users
+        
 class UserViewSet(AbstractUserViewSet):
     queryset = models.CustomUser.objects.all().order_by('id')
     http_method_names = ['get', 'put', 'patch', 'delete', 'post']
@@ -326,6 +343,8 @@ class CoordinatorViewSet(AbstractUserViewSet):
             return self.queryset.filter(coordinator__branch__in=requestUserBranches).order_by('id')
         return self.queryset.none()
     def create(self, request, *args, **kwargs):
+        # Ensure the 'coordinator' group is included in kwargs
+        kwargs['groups'] = ['coordinator']
         user = super().create(request, *args, **kwargs)
         coordinator = attend_models.Coordinator.objects.create(user=user)
         serializer = self.get_serializer(user)
@@ -445,8 +464,7 @@ class StudentViewSet(AbstractUserViewSet):
     def create(self, request, *args, **kwargs):
         # Check supervisor permissions
         request_user = self.request.user
-        if 'supervisor' not in request_user.groups.all().values_list('name', flat=True):
-            return Response({'error': 'You do not have permission to create users'}, status=403)
+        kwargs['groups'] = ['student']
 
         # Get the track object from the body
         track_id = request.data.get('track_id')
@@ -498,77 +516,37 @@ class StudentViewSet(AbstractUserViewSet):
         return Response({
             'confirmation_link': create_password_url
         })
+    
+    @action(detail=False, methods=['post'], url_path='bulk-create', permission_classes=[core_permissions.IsSupervisorOrAboveUser])
+    def bulk_create(self, request, *args, **kwargs):
+        """
+        Bulk create students. Expects a list of user dicts in 'users'.
+        Each user dict must include 'email', 'first_name', 'last_name', 'phone_number', and 'track_id'.
+        """
+        
+        kwargs['groups'] = ['student']
+        created_users = self._bulk_create_users(request, *args, **kwargs)
 
-class BulkCreateStudents(APIView):
-    permission_classes = [core_permissions.IsSupervisorOrAboveUser]
-    http_method_names = ['post']
-
-    confirmation_links = {}
-    def post(self, request, *args, **kwargs):
         requestUser = self.request.user
-        requestUserGroups = requestUser.groups.all()
-        data = request.data
-        users = data.get('users', [])
-        if not users:
-            return Response({'error': 'No user data provided'}, status=400)
-        if 'supervisor' not in requestUserGroups.values_list('name', flat=True):
-            return Response({'error': 'You do not have permission to create users'}, status=403)
-        for user_data in users:
-            email = user_data.get('email')
-            first_name = user_data.get('first_name')
-            last_name = user_data.get('last_name')
-            phone_number = user_data.get('phone_number')
-            track = user_data.get('track_id')
-
-            # find track
-            track_obj = requestUser.tracks.get(id=track) if track else None
-            if not track_obj:
-                return Response({'error': f'You currently arent the supervisor of any track.'}, status=400)
-
-            print(f"Creating user with email: {email}, track: {track_obj}, track_name: {track_obj}")
-
-            if not email:
-                return Response({'error': 'Email is required for all users'}, status=400)
-            # create random password ( uncomment this in production)
-            # password = get_random_string(length=8)
-            password = 'test'
-            print(f"Generated password for {email}: {password}")
-            # Create the user
-            user = models.CustomUser.objects.create_user(
-                email=email,
-                password=password,
-                is_active=False,
-                first_name=first_name,
-                last_name=last_name,
-                phone_number=phone_number
+        track_id = request.data.get('track_id')
+        if not track_id:
+            return Response({'error': 'Track ID is required for all users'}, status=400)
+        track_obj = requestUser.tracks.get(id=track_id) if track_id else None
+        if not track_obj:
+            return Response({'error': f'You currently arent the supervisor of any track.'}, status=400)
+        student_profiles = []
+        for user in created_users:
+            student_profiles += attend_models.Student(
+                track=track_obj,
+                user=user
             )
+        attend_models.Student.objects.bulk_create(student_profiles)
 
-            # create student_profile
-            student_profile = attend_models.Student.objects.create(track=track_obj, user=user)
-            student_profile.save()
-
-            # add student group to user
-            studentGroup = Group.objects.get(name='student')
-            user.groups.add(studentGroup)
-
-            # create tokens for users
-            access_token = AccessToken.for_user(user)
-            create_password_url= f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
-
-            # aggregate confirmation links
-            print(f"Confirmation link for {email}: {create_password_url}")
-            self.confirmation_links[email] = create_password_url
-            
-            # uncomment this in production
-            send_mail(
-                subject="Account Activation",
-                message=f"Click the link below to activate your account:\n{create_password_url}",
-                from_email=os.environ.get('EMAIL_USER'),
-                recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
-            )
-
-
-        return Response({'message': 'Bulk user creation successful!', 'confirmation_links': self.confirmation_links})
+        serializer = self.get_serializer(created_users, many=True)
+        return Response({
+            'message': 'Bulk user creation successful!',
+            'users': serializer.data
+            }, status=status.HTTP_201_CREATED)
 
 class UserActivateView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -596,7 +574,7 @@ class UserActivateView(APIView):
         if 'student' in user.groups.all().values_list('name', flat=True):
             student_profile = attend_models.Student.objects.get(user=user)
             # check for upcoming schedules and create attendance records for user if they don't exist
-            upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track, start_time__gte=timezone.localtime())
+            upcoming_schedules = attend_models.Schedule.objects.filter(track=student_profile.track).exclude(sessions__end_time__lt=timezone.localtime()).distinct()
             numOfAttenCreated = 0
             for schedule in upcoming_schedules:
                 record, created = attend_models.AttendanceRecord.objects.get_or_create(student=student_profile, schedule=schedule)
