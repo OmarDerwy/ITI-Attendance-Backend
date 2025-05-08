@@ -371,7 +371,7 @@ class ResetPasswordConfirmation(APIView):
         user.save()
         return Response({'message': 'Password has been reset successfully.'})
 
-class StudentViewSet(viewsets.ModelViewSet):
+class StudentViewSet(AbstractUserViewSet):
 
     serializer_class = serializers.StudentsSerializer
     permission_classes = [core_permissions.IsSupervisorOrAboveUser]
@@ -421,7 +421,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         request_user = self.request.user
         if 'supervisor' not in request_user.groups.all().values_list('name', flat=True):
             return Response({'error': 'You do not have permission to create users'}, status=403)
-        
+
         # Get the track object from the body
         track_id = request.data.get('track_id')
         if not track_id:
@@ -429,51 +429,26 @@ class StudentViewSet(viewsets.ModelViewSet):
         track_obj = request_user.tracks.get(id=track_id)
         if not track_obj:
             return Response({'error': 'You are not currently the supervisor of any track'}, status=400)
-        
-        # Extract required data
-        email = request.data.get('email')
-        if not email:
-            return Response({'error': 'Email is required'}, status=400)
-        
-        # Create the user with basic information
-        password = 'test'  # In production: get_random_string(length=8)
-        user = models.CustomUser.objects.create_user(
-            email=email,
-            password=password,
-            is_active=False,
-            first_name=request.data.get('first_name'),
-            last_name=request.data.get('last_name'),
-            phone_number=request.data.get('phone_number'),
-        )
-        
+
+        # Use AbstractUserViewSet's create to create the user and send email
+        user = super().create(request, *args, **kwargs)
+
         # Create student profile and associate with track
         student_profile = attend_models.Student.objects.create(track=track_obj, user=user)
-        
-        # Add student group
-        student_group = Group.objects.get(name='student')
-        user.groups.add(student_group)
-        
-        # Create activation token and URL
-        access_token = AccessToken.for_user(user)
-        create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
-        
-        # For development: print the link
-        print(f"Confirmation link for {email}: {create_password_url}")
-        
-        # For production: send email (commented out)
-        send_mail(
-            subject="Account Activation",
-            message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.environ.get('EMAIL_USER'),
-            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
-        )
-        
+
         # Serialize and return the created user
         serializer = self.get_serializer(user)
         return Response({
             'user': serializer.data,
-            'confirmation_link': create_password_url
-        }, status=201)
+            'student_profile_id': student_profile.id
+        }, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        # Use AbstractUserViewSet's update to update the user and send email if needed
+        user = super().update(request, *args, **kwargs)
+        serializer = self.get_serializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['get'], url_path='make-inactive')
     def make_inactive(self, request, *args, **kwargs):
         student = self.get_object()
