@@ -1,6 +1,6 @@
 from datetime import timezone
 from . import models, serializers
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from core import permissions as core_permissions
 from django.contrib.auth.models import Group
 from rest_framework.decorators import action
@@ -21,7 +21,77 @@ FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:8080')
 ACTIVATION_PATH = os.environ.get('ACTIVATION_PATH', '/activate/')
 RESET_PASSWORD_PATH = os.environ.get('RESET_PASSWORD_PATH', '/reset-password/')
 
-class UserViewSet(viewsets.ModelViewSet):
+class AbstractUserViewSet(viewsets.ModelViewSet):
+    """
+    Abstract base viewset for user operations.
+    The create and update methods return the user object for further processing.
+    Handles sending activation emails on create and update.
+    """
+
+    def create(self, request, *args, **kwargs):
+        # Extract required data
+        email = request.data.get('email')
+        if not email:
+            raise ValidationError({'error': 'Email is required'})
+        password = 'test'  # In production: get_random_string(length=8)
+        user = models.CustomUser.objects.create_user(
+            email=email,
+            password=password,
+            is_active=False,
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+        )
+        groups = request.data.get('groups', [])
+        if groups:
+            user_group = Group.objects.get(name=groups[0])
+            user.groups.add(user_group)
+        # Send activation email
+        self._send_confirmation_mail(user)
+        return user
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        email = request.data.get('email')
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+        groups = request.data.get('groups', [])
+
+        email_changed = False
+        if email and email != user.email:
+            user.email = email #TODO email is changed before verification, need to store the old email somwhere
+            user.is_active = False
+            password = 'test'  # In production: get_random_string(length=8)
+            user.set_password(password)
+            email_changed = True
+        if first_name:
+            user.first_name = first_name
+        if last_name:
+            user.last_name = last_name
+        if groups:
+            group_ids = getGroupIDFromNames(groups)
+            if isinstance(group_ids, Response):
+                return group_ids
+            user.groups.clear()
+            user.groups.add(*group_ids)
+        user.save()
+        # Send activation email if email changed
+        if email_changed:
+            self._send_confirmation_mail(user)
+        return user
+
+    def _send_confirmation_mail(self, user):
+        access_token = AccessToken.for_user(user)
+        create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
+        print(f"Confirmation link for {user.email}: {create_password_url}")
+        send_mail(
+            subject="Account Activation",
+            message=f"Click the link below to activate your account:\n{create_password_url}",
+            from_email=os.environ.get('EMAIL_USER'),
+            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
+        )
+
+class UserViewSet(AbstractUserViewSet):
     queryset = models.CustomUser.objects.all().order_by('id')
     http_method_names = ['get', 'put', 'patch', 'delete', 'post']
     permission_classes = [core_permissions.IsInstructorOrAboveUser]
@@ -66,110 +136,21 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
     
-    # use this endpoint to add new user (admin/supervisor)
     def create(self, request, *args, **kwargs):
-        # Check supervisor permissions
-        request_user = self.request.user
-        if not request_user.groups.filter(name='admin').exists():
-            return Response({'error': 'You do not have permission to create users'}, status=403)
-        
-        # Extract required data
-        email = request.data.get('email')
-        if not email:
-            return Response({'error': 'Email is required'}, status=400)
-        
-        # Create the user with basic information
-        password = 'test'  # In production: get_random_string(length=8)
-        user = models.CustomUser.objects.create_user(
-            email=email,
-            password=password,
-            is_active=False,
-            first_name=request.data.get('first_name'),
-            last_name=request.data.get('last_name'),
-            phone_number=request.data.get('phone_number'),
-        )
-        
-        # Add user group
-        groups = request.data.get('groups', [])
-        user_group = Group.objects.get(name=groups[0])  # Access the first group in the list
-        user.groups.add(user_group)
-        
-        # Create activation token and URL
-        access_token = AccessToken.for_user(user)
-        create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
-        
-        # For development: print the link
-        print(f"Confirmation link for {email}: {create_password_url}")
-        
-        # For production: send email (commented out)
-        send_mail(
-            subject="Account Activation",
-            message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.environ.get('EMAIL_USER'),
-            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
-        )
-        
-        # Serialize and return the created user
+        user = super().create(request, *args, **kwargs)
         serializer = self.get_serializer(user)
-        return Response({
-            'user': serializer.data,
-            'confirmation_link': create_password_url
-        }, status=201)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        # access_token = AccessToken.for_user(user)
+        # create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
+        # return Response({
+        #     'user': serializer.data,
+        #     'confirmation_link': create_password_url
+        # }, status=status.HTTP_201_CREATED)
         
-    # update user
     def update(self, request, *args, **kwargs):
-        
-        request_user = self.request.user
-        if not request_user.groups.filter(name='admin').exists():
-            return Response({'error': 'You do not have permission to update users'}, status=403)
-        
-        user = self.get_object()
-        email = request.data.get('email')
-        first_name = request.data.get('first_name')
-        last_name = request.data.get('last_name')
-        groups = request.data.get('groups', [])
-
-        # Check if email has changed
-        if email and email != user.email:
-            user.email = email
-            user.is_active = False  # Deactivate user until they confirm the new email
-            password = 'test'  # In production: get_random_string(length=8)
-            user.set_password(password)
-
-            # Create activation token and URL
-            access_token = AccessToken.for_user(user)
-            create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
-
-            # For development: print the link
-            print(f"Confirmation link for {email}: {create_password_url}")
-
-            # For production: send email (commented out)
-            send_mail(
-            subject="Account Activation",
-            message=f"Click the link below to activate your account:\n{create_password_url}",
-            from_email=os.environ.get('EMAIL_USER'),
-            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
-        )
-
-        # Update first and last name
-        if first_name:
-            user.first_name = first_name
-        if last_name:
-            user.last_name = last_name
-
-        # Update groups if provided
-        if groups:
-            group_ids = getGroupIDFromNames(groups)
-            if isinstance(group_ids, Response):
-                return group_ids
-            user.groups.clear()
-            user.groups.add(*group_ids)
-
-        user.save()
-
-        # Serialize and return the updated user
+        user = super().update(request, *args, **kwargs)
         serializer = self.get_serializer(user)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
             
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
