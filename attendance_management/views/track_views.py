@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from calendar import monthrange
 from collections import defaultdict
 import calendar
-from ..models import Track, Schedule, Session
+from ..models import Track, Schedule, Session, Branch
 from ..serializers import TrackSerializer
 from core import permissions
 
@@ -30,9 +30,12 @@ class TrackViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_active=is_active)
         if 'admin' in user_groups:
             return queryset
-        if 'branch_manager' in user_groups:
-            branch = user.branch
-            return queryset.filter(default_branch=branch)
+        if 'branch-manager' in user_groups:
+            # Get the branch where the user is the branch manager
+            branch = Branch.objects.filter(branch_manager=user).first()
+            if branch:
+                return queryset.filter(default_branch=branch)
+            return Track.objects.none()
         if 'coordinator' in user_groups:
             coordinator_profile = user.coordinator
             return queryset.filter(default_branch__coordinators=coordinator_profile)
@@ -56,9 +59,6 @@ class TrackViewSet(viewsets.ModelViewSet):
         Get all tracks for a specific branch with online/offline statistics.
         
         Query Parameters:
-        - branch_id: ID of the branch to filter tracks
-        - start_date: Optional start date for statistics (YYYY-MM-DD)
-        - end_date: Optional end date for statistics (YYYY-MM-DD)
         - is_active: Optional filter for active/inactive tracks (true/false)
         
         Returns:
@@ -66,27 +66,30 @@ class TrackViewSet(viewsets.ModelViewSet):
         - Each track includes daily data and monthly summaries
         - Track details including start_date, intake, supervisor, and description
         """
-        branch_id = request.query_params.get('branch_id')
-        if not branch_id:
-            return Response({"error": "branch_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        request_user = self.request.user
+        user_groups = request_user.groups.values_list('name', flat=True)
         
-        # Get date range parameters with defaults
-        today = timezone.now().date()
-        start_date_str = request.query_params.get('start_date')
-        end_date_str = request.query_params.get('end_date')
+        # Get the branch based on user role
+        branch = None
+        if 'admin' in user_groups:
+            branch_id = request.query_params.get('branch_id')
+            if not branch_id:
+                return Response({"error": "branch_id is required for admin users"}, status=status.HTTP_400_BAD_REQUEST)
+            branch = Branch.objects.filter(id=branch_id).first()
+            if not branch:
+                return Response({"error": f"Branch with id {branch_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+        elif 'branch-manager' in user_groups:
+            # Get the branch where the user is the branch manager
+            branch = Branch.objects.filter(branch_manager=request_user).first()
+            if not branch:
+                return Response({"error": "No branch found for this branch manager"}, status=status.HTTP_404_NOT_FOUND)
+        
         is_active_str = request.query_params.get('is_active')
-        
-        try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else today - timedelta(days=90)
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else today
-        except ValueError:
-            return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
-        
         # Get tracks for the specified branch
         tracks_query = Track.objects.filter(
-            Q(default_branch_id=branch_id) | 
-            Q(schedules__custom_branch_id=branch_id)
-        ).distinct().select_related('supervisor', 'default_branch')
+            Q(default_branch=branch) #| 
+            # Q(schedules__custom_branch_id=branch.id)
+        ).distinct().select_related('default_branch', 'supervisor')
         
         # Apply is_active filter if provided
         if is_active_str is not None:
@@ -101,8 +104,6 @@ class TrackViewSet(viewsets.ModelViewSet):
             # Get all schedules for this track within date range
             schedules = Schedule.objects.filter(
                 track=track,
-                created_at__gte=start_date,
-                created_at__lte=end_date
             ).prefetch_related('sessions')
             
             # Initialize data structures
@@ -123,7 +124,7 @@ class TrackViewSet(viewsets.ModelViewSet):
                     'date': date_str,
                     'type': session_type,
                     'schedule_id': schedule.id,
-                    'schedule_name': schedule.name
+                    'schedule_name': schedule.name if hasattr(schedule, 'name') else f"Schedule {schedule.id}"
                 }
                 
                 # Update monthly statistics
