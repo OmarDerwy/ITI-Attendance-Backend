@@ -5,11 +5,11 @@ meta {
 }
 
 get {
-  url: http://localhost:8000/api/v1/attendance/tracks/branch_statistics?branch_id=8
+  url: http://localhost:8000/api/v1/attendance/tracks/branch_statistics?is_active=true
   body: none
   auth: inherit
 }
 
 params:query {
-  branch_id: 8
+  is_active: true
 }
