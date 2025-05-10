@@ -40,7 +40,7 @@ class CustomUserSerializer(BaseUserSerializer):
     groups = serializers.StringRelatedField(many=True)
     class Meta(BaseUserSerializer.Meta):
         model = User
-        fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'is_staff', 'is_superuser', 'is_active']
+        fields = ['id', 'email', 'groups', 'first_name', 'last_name', 'phone_number', 'is_staff', 'is_superuser', 'is_active', 'is_banned']
         read_only_fields = ['id', 'email', 'groups', 'phone_number'] # TODO create more specific permissions later
     
 
@@ -59,7 +59,7 @@ class StudentsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'tracks', 'is_active', 'date_joined']
+        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'tracks', 'is_active', 'date_joined', 'is_banned']
         read_only_fields = ['id', 'email'] # TODO create more specific permissions later
 
     def to_representation(self, instance):

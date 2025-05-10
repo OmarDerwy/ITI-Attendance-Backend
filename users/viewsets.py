@@ -447,15 +447,15 @@ class StudentViewSet(AbstractUserViewSet):
         # select_related for performance
         students = students.select_related('student_profile', 'student_profile__track', 'student_profile__track__default_branch')
         if trackParam and trackParam != 'All':
-            track = requestUser.tracks.get(id=trackParam)
-            students = allUsers.filter(student_profile__track=track)
+            track = attend_models.Track.objects.get(id=trackParam) #TODO this might be a little too open
+            students = students.filter(student_profile__track=track)
         if searchParam:
             students = students.filter(Q(email__icontains=searchParam) | Q(first_name__icontains=searchParam) | Q(last_name__icontains=searchParam)) # TODO consider adding capability for admins to view all students and add them
         if isactiveParam:
             isactiveParam = isactiveParam.lower() == 'true' if isactiveParam else False
             students = students.filter(student_profile__track__is_active=isactiveParam)
         if 'coordinator' in requestUserGroups:
-            branch = requestUser.coordinator.branch
+            branch = attend_models.Branch.objects.get(coordinators=requestUser.coordinator)
             students = students.filter(student_profile__track__default_branch=branch)
             return students.order_by('id')
         if 'supervisor' in requestUserGroups:
@@ -496,7 +496,7 @@ class StudentViewSet(AbstractUserViewSet):
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['get'], url_path='make-inactive')
+    @action(detail=True, methods=['patch'], url_path='make-inactive')
     def make_inactive(self, request, *args, **kwargs):
         student = self.get_object()
         student.is_active = False
@@ -506,10 +506,9 @@ class StudentViewSet(AbstractUserViewSet):
         upcoming_attendance_records =  student_profile.attendance_records.filter(schedule__created_at__gte=timezone.localtime())
         print(f"Deleting {upcoming_attendance_records.count()} attendance records for {student.email}.")
         upcoming_attendance_records.delete()
-        student.save()
         return Response({'message': 'Student has been made inactive successfully.'})
     
-    @action(detail=True, methods=['get'], url_path='resend-activation')
+    @action(detail=True, methods=['patch'], url_path='resend-activation')
     def resend_activation(self, request, *args, **kwargs):
         student = self.get_object()
         student.is_banned = False

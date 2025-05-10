@@ -1478,14 +1478,14 @@ class AttendanceViewSet(viewsets.ViewSet):
         """
         try:
             # Get the supervisor (logged-in user)
-            supervisor = request.user
+            request_user = request.user
             
             # Get the student by ID (from URL parameter)
             student = get_object_or_404(Student, user_id=pk)
             
             # Check if student belongs to a track supervised by this supervisor
-            if student.track.supervisor != supervisor:
-                logger.warning(f"Supervisor {supervisor.email} attempted to access attendance data for student {student.user.email} in unauthorized track")
+            if student.track.supervisor != request_user and not student.track.default_branch.coordinators.filter(user=request_user).exists():
+                logger.warning(f"User {request_user.email} attempted to access attendance data for student {student.user.email} in unauthorized track")
                 return Response({
                     "status": "error",
                     "message": "You are not authorized to view attendance records for this student."
