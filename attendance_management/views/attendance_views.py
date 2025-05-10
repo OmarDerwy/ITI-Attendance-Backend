@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404
 from users.models import CustomUser
 from django.utils import timezone
 from core.permissions import IsSupervisorOrAboveUser  # Changed from relative to absolute import
-from ..models import PermissionRequest, Track, Session
+from ..models import PermissionRequest, Track, Session, Branch
 from ..serializers import AttendanceRecordSerializer, AttendanceRecordSerializerForStudents, AttendanceRecordSerializerForSupervisors
 from django.db.models import Count, Q, Prefetch
 from datetime import timedelta, date, datetime
@@ -573,28 +573,59 @@ class AttendanceViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['GET'], url_path='attendance-percentage/today')
     def get_todays_attendance_percentage(self, request):
         """
-        Get today's attendance percentage.
-        - Supervisors see percentage for tracks they manage.
-        - Admins see percentage for all tracks.
+         Get today's attendance percentage.
+        - Admins: See percentage for all tracks
+        - Branch Managers: See percentage for tracks in their branch
+        - Supervisors: See percentage for their managed tracks
+        - Coordinators: See percentage for all tracks in their branch
         """
         try:
             user = request.user
-            is_admin = user.is_staff # Check if the user is an admin
-
-            if is_admin:
-                # Admin sees all tracks
+            user_groups = user.groups.values_list('name', flat=True)
+            track_id = request.query_params.get('track_id')
+            if 'admin' in user_groups:
+           
                 tracks = Track.objects.all()
                 if not tracks.exists():
-                     return Response({"status": "info", "message": "No tracks found in the system."}, status=status.HTTP_200_OK)
-            else:
-                # Supervisor sees only their tracks
-                tracks = Track.objects.filter(supervisor=user)
+                    return Response({"status": "info", "message": "No tracks found in the system."}, 
+                                status=status.HTTP_200_OK)
+                
+            elif 'branch-manager' in user_groups:
+                branch = Branch.objects.filter(branch_manager=user).first()
+                if not branch:
+                    return Response({
+                        "status": "error",
+                        "message": "No branch found for this branch manager."
+                    }, status=status.HTTP_404_NOT_FOUND)
+                    
+                tracks = Track.objects.filter(default_branch=branch, is_active=True)
                 if not tracks.exists():
                     return Response({
                         "status": "error",
-                        "message": "You are not assigned as a supervisor to any track."
-                    }, status=status.HTTP_403_FORBIDDEN)
+                        "message": "No tracks found in your branch."
+                    }, status=status.HTTP_404_NOT_FOUND)
 
+            elif 'supervisor' in user_groups:
+                    tracks = Track.objects.filter(supervisor=user, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "You are not assigned as a supervisor to any track."
+                        }, status=status.HTTP_403_FORBIDDEN)
+            elif 'coordinator' in user_groups:
+                coordinator_profile = user.coordinator
+                tracks = Track.objects.filter(default_branch__coordinators=coordinator_profile, is_active=True)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "No tracks found in your branch."
+                    }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                return Response({
+                    "status": "error",
+                    "message": "You must be an admin, branch manager, supervisor, or coordinator to access this endpoint."
+                }, status=status.HTTP_403_FORBIDDEN)
+                    
             date = timezone.localdate()
 
             total_students = 0
@@ -630,24 +661,58 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-#TODO [AP-75]: fix bug in this function
     @action(detail=False, methods=['GET'], url_path='attendance-percentage/weekly')
     def get_weekly_attendance_percentage(self, request):
         """
-        Get weekly attendance percentage for the tracks managed by the logged-in supervisor.
+        Get weekly attendance percentage for tracks.
+        - Admins: See percentage for all tracks
+        - Branch Managers: See percentage for tracks in their branch
+        - Supervisors: See percentage for their managed tracks
+        - Coordinators: See percentage for all tracks in their branch
         """
         try:
-            supervisor = request.user
-            if not Track.objects.filter(supervisor=supervisor).exists():
+            user = request.user
+            user_groups = user.groups.values_list('name', flat=True)
+            if 'admin' in user_groups:
+                tracks = Track.objects.filter(is_active=True)
+                if not tracks.exists():
+                    return Response({
+                        "status": "info", 
+                        "message": "No tracks found in the system."
+                    }, status=status.HTTP_200_OK)
+
+            elif 'branch-manager' in user_groups:
+                branch = Branch.objects.filter(branch_manager=user).first()
+                if not branch:
+                    return Response({
+                        "status": "error",
+                        "message": "No branch found for this branch manager."
+                    }, status=status.HTTP_404_NOT_FOUND)
+                tracks = Track.objects.filter(default_branch=branch, is_active=True)
+
+            elif 'supervisor' in user_groups:
+                tracks = Track.objects.filter(supervisor=user, is_active=True)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not assigned as a supervisor to any track."
+                    }, status=status.HTTP_403_FORBIDDEN)
+            elif 'coordinator' in user_groups:
+                coordinator_profile = user.coordinator
+                tracks = Track.objects.filter(default_branch__coordinators=coordinator_profile, is_active=True)
+                if not tracks.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "No tracks found in your branch."
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
                 return Response({
                     "status": "error",
-                    "message": "You are not assigned as a supervisor to any track."
+                    "message": "You must be an admin, branch manager, supervisor, or coordinator to access this endpoint."
                 }, status=status.HTTP_403_FORBIDDEN)
 
             end_date = timezone.localdate()
             start_date = end_date - timedelta(days=7)
-            tracks = Track.objects.filter(supervisor=supervisor)
-
             total_students = Student.objects.filter(track__in=tracks).count()
             # Get schedules in the past week
             schedules = Schedule.objects.filter(
@@ -694,23 +759,66 @@ class AttendanceViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['GET'], url_path='attendance-trends', permission_classes=[IsSupervisorOrAboveUser])
     def get_attendance_trends(self, request):
+        """
+        Get attendance trends over time.
+        - Admins: See trends for all tracks
+        - Branch Managers: See trends for tracks in their branch
+        - Supervisors: See trends for their managed tracks
+        - Coordinators: See trends for all tracks in their branch
+        """
         try:
             user = request.user
             user_groups = list(user.groups.values_list('name', flat=True))
-            is_admin = 'admin' in user_groups
-
+            track_id = request.query_params.get('track_id')
+            branch_id = request.query_params.get('branch_id')
             track_id = request.query_params.get('track_id')
             branch_id = request.query_params.get('branch_id') 
-            if is_admin:
-                tracks_query = Track.objects.all()
+            if 'admin' in user_groups:
+                tracks_query = Track.objects.filter(is_active=True)
                 if branch_id:
                     tracks_query = tracks_query.filter(default_branch_id=branch_id)
-
                 if not tracks_query.exists():
-                    return Response({"status": "info", "message": "No tracks found for this branch."}, status=status.HTTP_200_OK)
+                    return Response({
+                        "status": "info",
+                        "message": "No tracks found in the system."
+                    }, status=status.HTTP_200_OK)
+
+            elif 'branch-manager' in user_groups:
+                branch = Branch.objects.filter(branch_manager=user).first()
+                if not branch:
+                    return Response({
+                        "status": "error",
+                        "message": "No branch found for this branch manager."
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                tracks_query = Track.objects.filter(default_branch=branch, is_active=True)
+                if not tracks_query.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "No tracks found in your branch."
+                    }, status=status.HTTP_404_NOT_FOUND)
+
+            elif 'supervisor' in user_groups:
+                tracks_query = Track.objects.filter(supervisor=user, is_active=True)
+                if not tracks_query.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not assigned as a supervisor to any track."
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+            elif 'coordinator' in user_groups:
+                coordinator_profile = user.coordinator
+                tracks_query = Track.objects.filter(default_branch__coordinators=coordinator_profile, is_active=True)
+                if not tracks_query.exists():
+                    return Response({
+                        "status": "error",
+                        "message": "No tracks found in your branch."
+                    }, status=status.HTTP_403_FORBIDDEN)
             else:
-                # Supervisor sees only their tracks
-                tracks_query = Track.objects.filter(supervisor=user)
+                return Response({
+                    "status": "error",
+                    "message": "You must be an admin, branch manager, supervisor, or coordinator to access this endpoint."
+                }, status=status.HTTP_403_FORBIDDEN)
 
             if track_id:
                 tracks_query = tracks_query.filter(id=track_id)
@@ -1041,29 +1149,52 @@ class AttendanceViewSet(viewsets.ViewSet):
     def get_weekly_attendance_by_track(self, request):
         """
         Get attendance percentage breakdown for each track from Saturday to Friday.
-        If no track_id is provided, returns data for all tracks managed by the logged-in supervisor.
+        For supervisors: Shows data for their managed tracks
+        For coordinators: Shows data for all tracks in their branch
         """
         try:
-            supervisor = request.user
+            user = request.user
+            user_groups = user.groups.values_list('name', flat=True)
             track_id = request.query_params.get('track_id')
 
-            # Filter tracks
-            if track_id:
-                tracks = Track.objects.filter(id=track_id, supervisor=supervisor)
-                if not tracks.exists():
-                    return Response({
-                        "status": "error",
-                        "message": "Invalid track ID or you are not the supervisor of this track."
-                    }, status=status.HTTP_403_FORBIDDEN)
+            # Initialize tracks queryset based on user role
+            if 'supervisor' in user_groups:
+                if track_id:
+                    tracks = Track.objects.filter(id=track_id, supervisor=user, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "Invalid track ID or you are not the supervisor of this track."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                else:
+                    tracks = Track.objects.filter(supervisor=user, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "You are not assigned as a supervisor to any track."
+                        }, status=status.HTTP_403_FORBIDDEN)
+            elif 'coordinator' in user_groups:
+                coordinator_profile = user.coordinator
+                if track_id:
+                    tracks = Track.objects.filter(id=track_id, default_branch__coordinators=coordinator_profile, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "Invalid track ID or this track is not in your branch."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                else:
+                    tracks = Track.objects.filter(default_branch__coordinators=coordinator_profile, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "No tracks found in your branch."
+                        }, status=status.HTTP_403_FORBIDDEN)
             else:
-                tracks = Track.objects.filter(supervisor=supervisor)
-                if not tracks.exists():
-                    return Response({
-                        "status": "error",
-                        "message": "You are not assigned as a supervisor to any track."
-                    }, status=status.HTTP_403_FORBIDDEN)
+                return Response({
+                    "status": "error",
+                    "message": "You must be either a supervisor or coordinator to access this endpoint."
+                }, status=status.HTTP_403_FORBIDDEN)
 
-            # Week range: Saturday to Friday
             today = timezone.localdate()
             weekday = today.weekday()
             days_since_saturday = (weekday - 5) % 7
@@ -1158,11 +1289,48 @@ class AttendanceViewSet(viewsets.ViewSet):
         """
         try:
             user = request.user
-            tracks = Track.objects.filter(supervisor=user)
+            user_groups = user.groups.values_list('name', flat=True)
             today = date.today()
             track_id = request.query_params.get('track_id')
             if track_id:
-                tracks = tracks.filter(id=track_id)
+                tracks = tracks.filter(id=track_id, is_active=True)
+                
+            if 'supervisor' in user_groups:
+                if track_id:
+                    tracks = Track.objects.filter(id=track_id, supervisor=user, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "Invalid track ID or you are not the supervisor of this track."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                else:
+                    tracks = Track.objects.filter(supervisor=user, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "You are not assigned as a supervisor to any track."
+                        }, status=status.HTTP_403_FORBIDDEN)
+            elif 'coordinator' in user_groups:
+                coordinator_profile = user.coordinator
+                if track_id:
+                    tracks = Track.objects.filter(id=track_id, default_branch__coordinators=coordinator_profile, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "Invalid track ID or this track is not in your branch."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                else:
+                    tracks = Track.objects.filter(default_branch__coordinators=coordinator_profile, is_active=True)
+                    if not tracks.exists():
+                        return Response({
+                            "status": "error",
+                            "message": "No tracks found in your branch."
+                        }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                return Response({
+                    "status": "error",
+                    "message": "You must be either a supervisor or coordinator to access this endpoint."
+                }, status=status.HTTP_403_FORBIDDEN)
 
             # Get all absences with a single optimized query
             absence_records = (
