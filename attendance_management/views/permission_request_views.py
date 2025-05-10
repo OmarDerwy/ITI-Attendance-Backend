@@ -77,21 +77,33 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         """
         Filter the queryset based on the user's role.
         Supervisors see requests for students in their track.
+        Coordinators see requests for students in their branch.
         Students see only their own requests.
         """
         user = self.request.user
-        if user.groups.filter(name='supervisor').exists():
-            return self.queryset.filter(student__track__supervisor=user).filter(status='pending')
-        return self.queryset.filter(student__user=user)
+        user_groups = user.groups.values_list('name', flat=True)
+        if 'supervisor' in user_groups:
+            return self.queryset.filter(student__track__supervisor=user, status='pending')
+        elif 'coordinator' in user_groups:
+            return self.queryset.filter(
+                student__track__default_branch__coordinators=user.coordinator,
+                status='pending'
+            )
+        elif 'student' in user_groups:
+            return self.queryset.filter(student__user=user)
+        return self.queryset.none()
 
     @action(detail=True, methods=['post'], url_path='approve')
     def approve(self, request, pk=None):
         """
         Approve a permission request.
-        Only supervisors or admins can perform this action.
+        Only supervisors, coordinators, or admins can perform this action.
         """
         permission_request = self.get_object()
-
+        user = request.user
+        approver_role = "supervisor"
+        if user.groups.filter(name='coordinator').exists():
+            approver_role = "coordinator"
         adjusted_time = request.data.get('adjusted_time')
         permission_request.adjusted_time = adjusted_time
         permission_request.status = 'approved'
@@ -103,10 +115,10 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         request_type_display = dict(PermissionRequest.REQUEST_TYPES).get(permission_request.request_type, permission_request.request_type)
         
         notification_message = (
-            f"Your {request_type_display} request for {schedule.name} on "
-            f"{schedule.created_at.strftime('%d %b, %Y')} has been approved. "
-            f"Adjusted time: {permission_request.adjusted_time.strftime('%H:%M') if permission_request.adjusted_time else 'N/A'}"
-        )
+        f"Your {request_type_display} request for {schedule.name} on "
+        f"{schedule.created_at.strftime('%d %b, %Y')} has been approved by your {approver_role}. "
+        f"Adjusted time: {permission_request.adjusted_time.strftime('%H:%M') if permission_request.adjusted_time else 'N/A'}"
+    )
         
         send_and_save_notification(
             user=student.user,
@@ -124,9 +136,13 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
     def reject(self, request, pk=None):
         """
         Reject a permission request.
-        Only supervisors or admins can perform this action.
+        Only supervisors, coordinators, or admins can perform this action.
         """
         permission_request = self.get_object()
+        user = request.user
+        rejector_role = "supervisor"
+        if user.groups.filter(name='coordinator').exists():
+            rejector_role = "coordinator"
         permission_request.status = 'rejected'
         permission_request.save()
         
@@ -136,10 +152,10 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         request_type_display = dict(PermissionRequest.REQUEST_TYPES).get(permission_request.request_type, permission_request.request_type)
         
         notification_message = (
-            f"Your {request_type_display} request for {schedule.name} on "
-            f"{schedule.created_at.strftime('%d %b, %Y')} has been rejected. "
-            f"Please contact your supervisor for more information."
-        )
+        f"Your {request_type_display} request for {schedule.name} on "
+        f"{schedule.created_at.strftime('%d %b, %Y')} has been rejected by your {rejector_role}. "
+        f"Please contact your {rejector_role} for more information."
+    )
         
         send_and_save_notification(
             user=student.user,
