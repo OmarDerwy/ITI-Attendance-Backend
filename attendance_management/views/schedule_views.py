@@ -16,7 +16,12 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         to_date = self.request.query_params.get('to_date')
         track_id = self.request.query_params.get('track')
 
-        if 'supervisor' in groups:
+        if 'coordinator' in groups:
+            # Get the branch where the user is the coordinator
+            branch = user.coordinator.branch
+            tracks = Track.objects.filter(default_branch=branch)
+            queryset = Schedule.objects.filter(track__in=tracks)
+        elif 'supervisor' in groups:
             tracks = Track.objects.filter(supervisor=user)
             queryset = Schedule.objects.filter(track__in=tracks)
         elif 'admin' in groups:
@@ -24,7 +29,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         elif 'student' in groups:
             queryset = Schedule.objects.filter(track__students__user=user)
         else:
-            queryset = Schedule.objects.none()
+            return Schedule.objects.none()  # No access for other users
         # query for track_id
         if track_id:
             queryset = queryset.filter(track_id=track_id)
