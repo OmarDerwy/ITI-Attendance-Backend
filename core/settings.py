@@ -66,14 +66,18 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'djoser',
-    'drf_spectacular',
     'users',
     'lost_and_found_system',
-    'django_extensions',
     'channels',
-
     'attendance_management',
 ]
+
+if DEBUG:
+    INSTALLED_APPS += [
+    'debug_toolbar',
+    'django_extensions',
+    'drf_spectacular',
+    ]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -86,12 +90,21 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+if DEBUG:
+    MIDDLEWARE.insert(4, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+
 ROOT_URLCONF = 'core.urls'
 #Update CORS_ALLOW_ALL_ORIGINS after frontend deployment
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     "authorization",
     "content-type",
+]
+
+INTERNAL_IPS = [
+    # ...
+    "127.0.0.1",
+    # ...
 ]
 
 TEMPLATES = [
@@ -208,8 +221,9 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': os.environ.get('PAGE_SIZE', 10),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
+if DEBUG:
+    REST_FRAMEWORK['DEFAULT_SCHEMA_CLASS'] = 'drf_spectacular.openapi.AutoSchema'
 
 AUTHENTICATION_BACKENDS = [
     "djoser.auth_backends.LoginFieldBackend",

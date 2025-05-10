@@ -5,7 +5,7 @@ from django.dispatch import receiver
 @receiver(post_migrate)
 def create_default_groups(sender, **kwargs):
     # Define the required groups
-    required_groups = ['admin', 'supervisor', 'instructor', 'student', 'coordinator', 'branch-manager', 'guest']
+    required_groups = ['admin', 'supervisor', 'instructor', 'student']
     
     for group_name in required_groups:
         Group.objects.get_or_create(name=group_name)

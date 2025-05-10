@@ -63,9 +63,15 @@ class StudentsSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'email'] # TODO create more specific permissions later
 
     def to_representation(self, instance):
+        # Use prefetched groups if available
         representation = super().to_representation(instance)
-        representation['groups'] = [group.name for group in instance.groups.all()]
+        groups = getattr(instance, '_prefetched_objects_cache', {}).get('groups')
+        if groups is not None:
+            representation['groups'] = [group.name for group in groups]
+        else:
+            representation['groups'] = [group.name for group in instance.groups.all()]
         return representation
+
     def to_internal_value(self, data):
         internal_value = super().to_internal_value(data)
         track = data.get('track')
