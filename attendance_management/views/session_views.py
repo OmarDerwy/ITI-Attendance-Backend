@@ -157,7 +157,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                         new_session = Session.objects.create(
                             title=title,
                             instructor=instructor,
-                            track_id=track_id,
+                            # track_id=track_id,
                             schedule=schedule,
                             start_time=start_time,
                             end_time=end_time,
@@ -168,7 +168,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                     new_session = Session.objects.create(
                         title=title,
                         instructor=instructor,
-                        track_id=track_id,
+                        # track_id=track_id,
                         schedule=schedule,
                         start_time=start_time,
                         end_time=end_time,

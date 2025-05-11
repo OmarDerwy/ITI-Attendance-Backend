@@ -133,10 +133,6 @@ class Schedule(models.Model):
 
 class Session(models.Model):
     # ForeignKey from nothing (leaf model)
-    track = models.ForeignKey(
-        Track,  # <-- ForeignKey to Track (attendance_management.models)
-        on_delete=models.CASCADE, related_name='sessions'
-    )  # Each session belongs to a track
     COURSE_CHOICES = [
         ('online', 'Online'),
         ('offline', 'Offline'),
