@@ -1,8 +1,8 @@
 from rest_framework import serializers
-from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest
+from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest, Guest, EventAttendanceRecord, Event
 from users.models import CustomUser
 from datetime import datetime, timedelta
-
+from django.core.exceptions import ValidationError
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
@@ -321,3 +321,80 @@ class StudentWithWarningSerializer(serializers.ModelSerializer):
         elif obj.excused_count >= excused_threshold:
             return "Excused"
         return None
+
+class GuestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Guest
+        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'date_of_birth', 'national_id', 'college_name', 'university_name','gradyear', 'degree_level']
+
+class EventSerializer(serializers.ModelSerializer):
+    target_tracks = MiniTrackSerializer(many=True, read_only=True)
+    target_track_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Track.objects.filter(is_active=True),
+        many=True,
+        write_only=True,
+        required=False,
+        source='target_tracks'
+    )
+    attendance_stats = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Event
+        fields = [
+            'id',
+            'description',
+            'audience_type',
+            'is_mandatory',
+            'created_at',
+            'updated_at',
+            'target_tracks',
+            'target_track_ids',
+            'attendance_stats'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_attendance_stats(self, obj):
+        if hasattr(obj, 'schedule'):
+            total_registered = EventAttendanceRecord.objects.filter(schedule=obj.schedule).count()
+            total_attended = EventAttendanceRecord.objects.filter(
+                schedule=obj.schedule,
+                status='attended'
+            ).count()
+            return {
+                'registered': total_registered,
+                'attended': total_attended,
+                'attendance_rate': round((total_attended / total_registered * 100), 2) if total_registered > 0 else 0
+            }
+        return None
+
+class EventAttendanceRecordSerializer(serializers.ModelSerializer):
+    student_details = serializers.SerializerMethodField(read_only=True)
+    guest_details = serializers.SerializerMethodField(read_only=True)
+    schedule_details = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = EventAttendanceRecord
+        fields = [
+            'id',
+            'schedule',
+            'schedule_details',
+            'student',
+            'student_details',
+            'guest',
+            'guest_details',
+            'check_in_time',
+            'check_out_time',
+            'status',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def validate(self, data):
+        """Let model validation handle core business rules"""
+        try:
+            instance = EventAttendanceRecord(**data)
+            instance.full_clean()
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return data
