@@ -297,21 +297,6 @@ class PermissionRequest(models.Model):
     def __str__(self):
         return f"{self.student} - {self.request_type} ({self.status})"
 
-class GuestEventRegistration(models.Model):
-    """Through model to track guest event registration and attendance"""
- 
-    guest = models.ForeignKey('Guest', on_delete=models.CASCADE)
-    event = models.ForeignKey('Event', on_delete=models.CASCADE)
-    registration_date = models.DateTimeField(auto_now_add=True)
-    class Meta:
-        unique_together = ('guest', 'event')
-        indexes = [
-            models.Index(fields=['registration_date']),
-        ]
-
-    def __str__(self):
-        return f"{self.guest} - {self.event}"
-
 
 class Guest(models.Model):
     user = models.OneToOneField(
@@ -325,15 +310,7 @@ class Guest(models.Model):
     university_name = models.CharField(max_length=255, blank=True, null=True)
     gradyear = models.DateField(blank=True, null=True)
     degree_level = models.CharField(max_length=100, blank=True, null=True)
-    event =models.ManyToManyField(
-        Event,
-        through='GuestEventRegistration',
-        related_name='guests',
-        blank=True,
-        help_text="Events that this guest can attend."
-    )
     
-
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name} - Guest"
 
