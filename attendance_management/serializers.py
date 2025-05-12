@@ -14,25 +14,12 @@ class MiniTrackSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 class ScheduleSerializer(serializers.ModelSerializer):
-    track = MiniTrackSerializer(read_only=True)  # Read-only field for track
-    sessions = serializers.StringRelatedField(many=True, read_only=True)  # Read-only field for sessions
-    start_time = serializers.SerializerMethodField()
-    end_time = serializers.SerializerMethodField()
-    attended_out_of_total = serializers.SerializerMethodField()
+    track = serializers.SerializerMethodField()  # Read-only field for track
+    sessions = serializers.SerializerMethodField()  # Updated to use SerializerMethodField
     
     class Meta:
         model = Schedule
         fields = ['id','name', 'track', 'created_at', 'sessions', 'custom_branch', 'is_shared', 'start_time', 'end_time', 'attended_out_of_total']
-
-    def get_start_time(self, obj):
-        """Get the start time from the first session of the day"""
-        first_session = Session.objects.filter(schedule=obj).order_by('start_time').first()
-        return first_session.start_time if first_session else None
-        
-    def get_end_time(self, obj):
-        """Get the end time from the last session of the day"""
-        last_session = Session.objects.filter(schedule=obj).order_by('-end_time').first()
-        return last_session.end_time if last_session else None
 
     def get_fields(self):
         fields = super().get_fields()
@@ -40,19 +27,21 @@ class ScheduleSerializer(serializers.ModelSerializer):
         if view and view.action == 'retrieve':
             fields['attendance_records'] = AttendanceRecordSerializer(many=True, read_only=True)
         return fields
+
+    def get_sessions(self, obj):
+        # Use prefetched sessions if available
+        sessions = getattr(obj, 'prefetched_sessions', None)
+        if sessions is None:
+            sessions = obj.sessions.all()
+        return [str(session) for session in sessions]
     
-    def get_attended_out_of_total(self, obj):
-        """
-        Calculate the number of students attended the schedule out of total students in the track using the available attendance records.
-        """
-        total_students = obj.attendance_records.count()
-        attended_students = AttendanceRecord.objects.filter(schedule=obj, check_in_time__isnull=False).values_list('student', flat=True).distinct().count()
-        
-        return {
-            "attended": attended_students,
-            "total": total_students
-        }
-        
+    def get_track(self, obj):
+        # Use prefetched track if available
+        track = getattr(obj, 'prefetched_track', None)
+        if track is None:
+            track = obj.track
+        return {'id': track.id, 'name': track.name} if track else None
+
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
         model = Student
@@ -169,35 +158,48 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     def get_student(self, obj):
         """
         Return first_name and last_name from the CustomUser model via Student.user.
+        Use prefetched student and user if available.
         """
+        student = getattr(obj, 'student', None)
+        if hasattr(obj, 'prefetched_student'):
+            student = obj.prefetched_student
+        user = getattr(student, 'user', None)
+        if hasattr(student, 'prefetched_user'):
+            user = student.prefetched_user
+        if user is None:
+            user = student.user
         return {
-            "first_name": obj.student.user.first_name,
-            "last_name": obj.student.user.last_name
+            "first_name": user.first_name,
+            "last_name": user.last_name
         }
 
-    def get_adjusted_time(self, obj): #used by DRF implicitly 
+    def get_adjusted_time(self, obj):
         """
-        Calculate the adjusted time based on the permission request.
+        Calculate the adjusted time based on the prefetched permission requests.
         """
-        permission_request = PermissionRequest.objects.filter(
-            student=obj.student, 
-            schedule=obj.schedule, 
-            status='approved'
-        ).first()
-
-        if permission_request:
-            return permission_request.adjusted_time
-
+        # Use prefetched permission requests if available
+        permission_requests_map = getattr(self, '_permission_requests_map', None)
+        if permission_requests_map is None:
+            return obj.check_in_time
+        prs = permission_requests_map.get((obj.schedule_id, obj.student_id), [])
+        for pr in prs:
+            if pr.status == 'approved' and pr.adjusted_time:
+                return pr.adjusted_time
         return obj.check_in_time
+
     def get_leave_request_status(self, obj):
         """
-        Check if there is a pending leave request for the student and schedule.
+        Check if there is a pending leave request for the student and schedule using prefetched permission requests.
         """
-        pending_request = PermissionRequest.objects.filter(
-            student=obj.student, 
-            schedule=obj.schedule, 
-        ).first()
-        return pending_request.status if pending_request else None
+        permission_requests_map = getattr(self, '_permission_requests_map', None)
+        if permission_requests_map is None:
+            return None
+        prs = permission_requests_map.get((obj.schedule_id, obj.student_id), [])
+        for pr in prs:
+            if pr.status == 'pending':
+                return 'pending'
+        return None
+
     def get_track_name(self, obj):
         """
         Get the track name from the student object.
@@ -209,17 +211,8 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         Get the warning status ('excused' or 'unexcused') if a threshold is exceeded.
         Relies on the optimized Student.has_exceeded_warning_threshold() method.
         """
-        has_warning, warning_type = obj.student.has_exceeded_warning_threshold()
-        return warning_type if has_warning else None
+        return obj.student.warning_status if obj.student else None
     
-    # def to_representation(self, instance):
-    #     data = super().to_representation(instance)
-    #     if self.context.get('view').action == 'retrieve':
-    #         # Include the schedule name in the response
-    #         scheduleData = ScheduleSerializer(instance.schedule).data
-    #         data['schedule'] = scheduleData
-    #     return data
-
 class AttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
     schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
     class Meta:

@@ -628,22 +628,23 @@ class AttendanceViewSet(viewsets.ViewSet):
                     
             date = timezone.localdate()
 
-            total_students = 0
-            attended_students = 0
-
-            for track in tracks:
-                schedules = Schedule.objects.filter(track=track, created_at=date)
-                scheduled_students = Student.objects.filter(
-                attendance_records__schedule__in=schedules
-            ).distinct().count()
-                total_students += scheduled_students
-
-                # Count how many of the scheduled students actually attended today
-                attended_students += AttendanceRecord.objects.filter(
-                    student__track=track,
-                    schedule__in=schedules,
-                    check_in_time__isnull=False
-                ).count()
+            all_schedules = Schedule.objects.filter(track__in=tracks, created_at=date)
+            student_scheds = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules
+            ).values('schedule__track_id', 'student').distinct()
+            
+            scheduled_map = {}
+            for rec in student_scheds:
+                tid = rec['schedule__track_id']
+                scheduled_map[tid] = scheduled_map.get(tid, 0) + 1
+            # Count actual attendance records per track
+            actual_qs = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules,
+                check_in_time__isnull=False
+            ).values('schedule__track_id').annotate(count=Count('id'))
+            actual_map = {item['schedule__track_id']: item['count'] for item in actual_qs}
+            total_students = sum(scheduled_map.values())
+            attended_students = sum(actual_map.values())
 
             attendance_percentage = (attended_students / total_students) * 100 if total_students > 0 else 0
 
@@ -1210,6 +1211,25 @@ class AttendanceViewSet(viewsets.ViewSet):
                 ).order_by('start_time').first()
                 if first_session and first_session.start_time > timezone.localtime():
                     week_dates.remove(today)
+            all_schedules = Schedule.objects.filter(track__in=tracks, created_at__in=week_dates)
+            schedule_count_map = {}
+            for sched in all_schedules:
+                key = (sched.track_id, sched.created_at)
+                schedule_count_map[key] = schedule_count_map.get(key, 0) + 1
+            student_scheds = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules
+            ).values('schedule__track_id', 'schedule__created_at', 'student').distinct()
+            scheduled_map = {}
+            for rec in student_scheds:
+                key = (rec['schedule__track_id'], rec['schedule__created_at'])
+                scheduled_map[key] = scheduled_map.get(key, 0) + 1
+            actual_qs = AttendanceRecord.objects.filter(
+                schedule__in=all_schedules, check_in_time__isnull=False
+            ).values('schedule__track_id', 'schedule__created_at').annotate(count=Count('id'))
+            actual_map = {
+                (item['schedule__track_id'], item['schedule__created_at']): item['count']
+                for item in actual_qs
+            }
             response_data = OrderedDict()
 
             for date in week_dates:
@@ -1219,26 +1239,15 @@ class AttendanceViewSet(viewsets.ViewSet):
                 total_actual_records = 0
 
                 for track in tracks:
-                    schedules = Schedule.objects.filter(track=track, created_at=date)
-
-                    if not schedules.exists():
-                        daily_data[track.name] = {
-                            "status": "Free Day"
-                        }
+                    key = (track.id, date)
+                    # No schedules = free day
+                    if schedule_count_map.get(key, 0) == 0:
+                        daily_data[track.name] = {"status": "Free Day"}
                         continue
-
-                    # Count only students scheduled today
-                    scheduled_students = Student.objects.filter(
-                        attendance_records__schedule__in=schedules
-                    ).distinct().count()
-                    
-                    total_students = scheduled_students
-                    expected_records = total_students * schedules.count()
-                    actual_records = AttendanceRecord.objects.filter(
-                        student__track=track,
-                        schedule__in=schedules,
-                        check_in_time__isnull=False
-                    ).count()
+                    schedule_count = schedule_count_map[key]
+                    scheduled_students = scheduled_map.get(key, 0)
+                    expected_records = scheduled_students * schedule_count
+                    actual_records = actual_map.get(key, 0)
 
                     present_percent = (actual_records / expected_records) * 100 if expected_records else 0
                     absent_percent = 100 - present_percent
@@ -1250,11 +1259,9 @@ class AttendanceViewSet(viewsets.ViewSet):
                         "absent_percent": round(absent_percent, 2)
                     }
 
-                    # Aggregate totals for "All tracks"
                     total_expected_records += expected_records
                     total_actual_records += actual_records
 
-                # Calculate the "All tracks" data
                 if total_expected_records > 0:
                     all_tracks_present_percent = (total_actual_records / total_expected_records) * 100
                     all_tracks_absent_percent = 100 - all_tracks_present_percent
@@ -1278,7 +1285,6 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
     @action(detail=False, methods=['get'], url_path='recent-absences')
     def recent_absences(self, request, *args, **kwargs):
@@ -1447,15 +1453,53 @@ class AttendanceViewSet(viewsets.ViewSet):
             # Get today's date
             today = timezone.localdate()
             
-            # Get today's and all past records
-            attendance_records = AttendanceRecord.objects.filter(
-                student=student,
-                schedule__created_at__lte=today
-            ).order_by('-schedule__created_at')  # Most recent first
-                
+            attendance_records = (
+                AttendanceRecord.objects
+                .filter(student=student, schedule__created_at__lte=today)
+                .select_related(
+                    'schedule',
+                    'schedule__track',
+                    'student__user',
+                    'student__track'
+                )
+                .prefetch_related(
+                    # Prefetch sessions for each schedule
+                    Prefetch(
+                        'schedule__sessions',
+                        queryset=Session.objects.order_by('start_time'),
+                        to_attr='prefetched_sessions'
+                    ),
+                    # Prefetch permission requests for the student
+                    Prefetch(
+                        'student__permission_requests',
+                        queryset=PermissionRequest.objects.filter(
+                            Q(schedule__created_at__lte=today) |
+                            Q(request_type='day_excuse'),
+                            status__in=['approved', 'pending']
+                        ).select_related('schedule'),
+                        to_attr='relevant_permissions'
+                    ),
+                    # Prefetch attendance_records for each schedule to avoid N+1 in Schedule.attended_out_of_total
+                    Prefetch(
+                        'schedule__attendance_records',
+                        queryset=AttendanceRecord.objects.select_related('student'),
+                        to_attr='prefetched_attendance_records'
+                    )
+                )
+                .order_by('-schedule__created_at')
+                .distinct()
+            )
+
+            # Attach prefetched attendance_records to each schedule instance
+            for record in attendance_records:
+                schedule = record.schedule
+                # Only set if not already set (in case of multiple records per schedule)
+                if not hasattr(schedule, 'prefetched_attendance_records'):
+                    # Find all attendance_records for this schedule from the prefetch cache
+                    # Django attaches them as schedule.prefetched_attendance_records
+                    pass  # Already attached by prefetch_related with to_attr
+
             serializer = AttendanceRecordSerializerForStudents(attendance_records, many=True)
-            
-            # Return simpler response structure
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Student.DoesNotExist:
@@ -1648,8 +1692,8 @@ class AttendanceViewSet(viewsets.ViewSet):
             
             
             # Get excused and unexcused absences
-            unexcused_absences = student.get_unexcused_absence_count()
-            excused_absences = student.get_excused_absence_count()
+            unexcused_absences = student.unexcused_absences
+            excused_absences = student.excused_absences
             total_absent = unexcused_absences + excused_absences
             # Calculate percentage
             attendance_percentage = (total_attended / total_days) * 100 if total_days > 0 else 0
