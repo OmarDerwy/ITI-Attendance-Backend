@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord, PermissionRequest, Guest, EventAttendanceRecord, Event
 from users.models import CustomUser
 from datetime import datetime, timedelta
-
+from django.core.exceptions import ValidationError
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
@@ -377,8 +377,11 @@ class EventAttendanceRecordSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'schedule',
+            'schedule_details',
             'student',
+            'student_details',
             'guest',
+            'guest_details',
             'check_in_time',
             'check_out_time',
             'status',
@@ -387,51 +390,11 @@ class EventAttendanceRecordSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-
-
-
     def validate(self, data):
-        if 'student' in data and 'guest' in data:
-            if data['student'] and data['guest']:
-                raise serializers.ValidationError(
-                    "Cannot have both student and guest for the same attendance record."
-                )
-            if not data['student'] and not data['guest']:
-                raise serializers.ValidationError(
-                    "Must provide either student or guest."
-                )
-
-        schedule = data.get('schedule')
-        if not schedule or not schedule.event:
-            raise serializers.ValidationError(
-                "This schedule does not have an associated event."
-            )
-
-        # Validate based on event audience type
-        event_type = schedule.event.audience_type
-        if 'student' in data and data['student']:
-            if event_type == 'guests_only':
-                raise serializers.ValidationError(
-                    "This event is for guests only."
-                )
-            if not data['student'].user.is_active:
-                raise serializers.ValidationError(
-                    "Student account is not active."
-                )
-            if not data['student'].track.is_active:
-                raise serializers.ValidationError(
-                    "Student's track is not active."
-                )
-            if schedule.target_tracks.exists():
-                if data['student'].track not in schedule.target_tracks.all():
-                    raise serializers.ValidationError(
-                        "Student's track is not allowed for this event."
-                    )
-
-        if 'guest' in data and data['guest']:
-            if event_type == 'students_only':
-                raise serializers.ValidationError(
-                    "This event is for students only."
-                )
-
+        """Let model validation handle core business rules"""
+        try:
+            instance = EventAttendanceRecord(**data)
+            instance.full_clean()
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
         return data
