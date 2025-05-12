@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from users.models import CustomUser
 from django.db.models import UniqueConstraint
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.conf import settings
 from .settings_models import ApplicationSetting
 
@@ -66,13 +67,32 @@ class Track(models.Model):
     def __str__(self):
         return self.name
 
+class Event(models.Model):
+    description = models.TextField(blank=True, null=True)
+    AUDIENCE_CHOICES = [
+        ('students_only', 'Students Only'),
+        ('guests_only', 'Guests Only'),
+        ('both', 'Students and Guests'),
+    ]
+    audience_type = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default='students_only')
+    is_mandatory = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    target_tracks = models.ManyToManyField(
+        'Track',
+        related_name='events',
+        blank=True,
+        help_text="Specific tracks that can attend this event. Leave empty for all tracks."
+    )
+    
 class Schedule(models.Model):
     # ForeignKey from Session - related_name: sessions
     # ForeignKey from AttendanceRecord - related_name: attendance_records
     # ForeignKey from PermissionRequest - related_name: permission_requests
     track = models.ForeignKey(
         Track,  # <-- ForeignKey to Track (attendance_management.models)
-        on_delete=models.CASCADE, related_name='schedules'
+        on_delete=models.CASCADE, related_name='schedules',
+        null=True, blank=True
     )  # Each schedule belongs to a track
     name = models.CharField(max_length=255)
     created_at = models.DateField(db_index=True) 
@@ -81,6 +101,13 @@ class Schedule(models.Model):
         on_delete=models.CASCADE, related_name='schedules'
     )  # Each schedule can have a custom_branch (Branch)
     is_shared = models.BooleanField(default=False)
+    event = models.OneToOneField(
+        Event,
+        on_delete=models.SET_NULL,
+        related_name='schedule',
+        null=True,
+        blank=True
+    )
 
     class Meta:
         unique_together = ('track', 'created_at')  # Define composite primary key
@@ -269,3 +296,145 @@ class PermissionRequest(models.Model):
 
     def __str__(self):
         return f"{self.student} - {self.request_type} ({self.status})"
+
+class GuestEventRegistration(models.Model):
+    """Through model to track guest event registration and attendance"""
+ 
+    guest = models.ForeignKey('Guest', on_delete=models.CASCADE)
+    event = models.ForeignKey('Event', on_delete=models.CASCADE)
+    registration_date = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        unique_together = ('guest', 'event')
+        indexes = [
+            models.Index(fields=['registration_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.guest} - {self.event}"
+
+
+class Guest(models.Model):
+    user = models.OneToOneField(
+        CustomUser,  # <-- OneToOne to CustomUser (users.models)
+        on_delete=models.CASCADE, related_name='guest_profile'
+    )  # Each guest is linked to a CustomUser
+    date_of_birth = models.DateField(blank=True, null=True)
+    national_id = models.CharField(max_length=20, blank=True, null=True, validators=[RegexValidator(regex=r'^\d{14}$', message="Enter a valid 14-digit national ID.")]
+)
+    college_name = models.CharField(max_length=255, blank=True, null=True)
+    university_name = models.CharField(max_length=255, blank=True, null=True)
+    gradyear = models.DateField(blank=True, null=True)
+    degree_level = models.CharField(max_length=100, blank=True, null=True)
+    event =models.ManyToManyField(
+        Event,
+        through='GuestEventRegistration',
+        related_name='guests',
+        blank=True,
+        help_text="Events that this guest can attend."
+    )
+    
+
+    def __str__(self):
+        return f"{self.user.first_name} {self.user.last_name} - Guest"
+
+
+class EventAttendanceRecord(models.Model):
+    """
+    Tracks attendance for event schedules, handling both students and guests.
+    """
+    STATUS_CHOICES = [
+        ('registered', 'Registered'),
+        ('attended', 'Attended'),
+        ('absent', 'Absent'),
+    ]
+
+    schedule = models.ForeignKey(
+        Schedule,
+        on_delete=models.CASCADE,
+        related_name='event_attendance_records'
+    )
+    #  links to either student or guest
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name='event_attendance_records',
+        null=True,
+        blank=True
+    )
+    guest = models.ForeignKey(
+        Guest,
+        on_delete=models.CASCADE,
+        related_name='event_attendance_records',
+        null=True,
+        blank=True
+    )
+    check_in_time = models.DateTimeField(blank=True, null=True)
+    check_out_time = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['check_in_time']),
+            models.Index(fields=['check_out_time']),
+            models.Index(fields=['status']),
+            models.Index(fields=['created_at']),
+        ]
+        constraints = [
+            # Ensure either student or guest is provided, but not both
+            models.CheckConstraint(
+                check=(
+                    models.Q(student__isnull=False, guest__isnull=True) |
+                    models.Q(student__isnull=True, guest__isnull=False)
+                ),
+                name='event_attendance_either_student_or_guest'
+            ),
+            # Prevent duplicate attendance records
+            models.UniqueConstraint(
+                fields=['schedule', 'student'],
+                name='unique_student_event_attendance',
+                condition=models.Q(student__isnull=False)
+            ),
+            models.UniqueConstraint(
+                fields=['schedule', 'guest'],
+                name='unique_guest_event_attendance',
+                condition=models.Q(guest__isnull=False)
+            )
+        ]
+
+    def clean(self):
+        if not self.schedule.event:
+            raise ValidationError("This schedule does not have an associated event.")
+        
+        if self.student and self.guest:
+            raise ValidationError("Cannot have both student and guest for the same attendance record.")
+        
+        if not self.student and not self.guest:
+            raise ValidationError("Must provide either student or guest.")
+
+        # Validate based on event audience type
+        event_type = self.schedule.event.audience_type
+        if self.student:
+            if event_type == 'guests_only':
+                raise ValidationError("This event is for guests only.")
+            if not self.student.user.is_active:
+                raise ValidationError("Student account is not active.")
+            if not self.student.track.is_active:
+                raise ValidationError("Student's track is not active.")
+            # Check if student's track is allowed for this event
+            if self.schedule.target_tracks.exists():
+                if self.student.track not in self.schedule.target_tracks.all():
+                    raise ValidationError("Student's track is not allowed for this event.")
+
+        if self.guest:
+            if event_type == 'students_only':
+                raise ValidationError("This event is for students only.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        attendee = self.student if self.student else self.guest
+        return f"Event Attendance: {attendee} - {self.schedule}"
