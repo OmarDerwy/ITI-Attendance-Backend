@@ -360,6 +360,32 @@ class CoordinatorViewSet(AbstractUserViewSet):
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+class GuestViewSet(AbstractUserViewSet):
+    queryset = models.CustomUser.objects.filter(groups__name='guest').order_by('id')
+    serializer_class = serializers.CustomUserSerializer
+
+    def create(self, request, *args, **kwargs):
+        date_of_birth = request.data.get('date_of_birth')
+        national_id = request.data.get('national_id')
+        college_name = request.data.get('college_name')
+        university_name = request.data.get('university_name')
+        gradyear = request.data.get('gradyear')
+        degree = request.data.get('degree')
+        # Ensure the 'guest' group is included in kwargs
+        kwargs['groups'] = ['guest']
+        user = super().create(request, *args, **kwargs)
+        # Create guest profile and associate with user
+        guest_profile = attend_models.Guest.objects.create(
+            user=user,
+            date_of_birth=date_of_birth,
+            national_id=national_id,
+            college_name=college_name,
+            university_name=university_name,
+            gradyear=gradyear,
+            degree_level=degree
+        )
+        serializer = self.get_serializer(user)
+        return Response({'user': serializer.data, 'guest_profile': guest_profile}, status=status.HTTP_201_CREATED)
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
@@ -518,6 +544,14 @@ class StudentViewSet(AbstractUserViewSet):
         return Response({
             'confirmation_link': create_password_url
         })
+    
+    @action(detail=True, methods=['patch'], url_path='reset-uuid')
+    def reset_uuid(self, request, *args, **kwargs):
+        student = self.get_object()
+        student.student_profile.phone_uuid = None
+        student.student_profile.laptop_uuid = None
+        student.student_profile.save()
+        return Response({'message': 'UUID has been reset successfully.'})
     
     @action(detail=False, methods=['post'], url_path='bulk-create', permission_classes=[core_permissions.IsSupervisorOrAboveUser])
     def bulk_create(self, request, *args, **kwargs):
