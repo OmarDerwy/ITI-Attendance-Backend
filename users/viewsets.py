@@ -545,6 +545,14 @@ class StudentViewSet(AbstractUserViewSet):
             'confirmation_link': create_password_url
         })
     
+    @action(detail=True, methods=['patch'], url_path='reset-uuid')
+    def reset_uuid(self, request, *args, **kwargs):
+        student = self.get_object()
+        student.student_profile.phone_uuid = None
+        student.student_profile.laptop_uuid = None
+        student.student_profile.save()
+        return Response({'message': 'UUID has been reset successfully.'})
+    
     @action(detail=False, methods=['post'], url_path='bulk-create', permission_classes=[core_permissions.IsSupervisorOrAboveUser])
     def bulk_create(self, request, *args, **kwargs):
         """
