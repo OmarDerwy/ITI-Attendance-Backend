@@ -360,6 +360,32 @@ class CoordinatorViewSet(AbstractUserViewSet):
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+class GuestViewSet(AbstractUserViewSet):
+    queryset = models.CustomUser.objects.filter(groups__name='guest').order_by('id')
+    serializer_class = serializers.CustomUserSerializer
+
+    def create(self, request, *args, **kwargs):
+        date_of_birth = request.data.get('date_of_birth')
+        national_id = request.data.get('national_id')
+        college_name = request.data.get('college_name')
+        university_name = request.data.get('university_name')
+        gradyear = request.data.get('gradyear')
+        degree = request.data.get('degree')
+        # Ensure the 'guest' group is included in kwargs
+        kwargs['groups'] = ['guest']
+        user = super().create(request, *args, **kwargs)
+        # Create guest profile and associate with user
+        guest_profile = attend_models.Guest.objects.create(
+            user=user,
+            date_of_birth=date_of_birth,
+            national_id=national_id,
+            college_name=college_name,
+            university_name=university_name,
+            gradyear=gradyear,
+            degree_level=degree
+        )
+        serializer = self.get_serializer(user)
+        return Response({'user': serializer.data, 'guest_profile': guest_profile}, status=status.HTTP_201_CREATED)
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
