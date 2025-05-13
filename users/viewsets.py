@@ -385,7 +385,7 @@ class GuestViewSet(AbstractUserViewSet):
             degree_level=degree
         )
         serializer = self.get_serializer(user)
-        return Response({'user': serializer.data, 'guest_profile': guest_profile}, status=status.HTTP_201_CREATED)
+        return Response({'user': serializer.data, 'guest_profile': guest_profile.id}, status=status.HTTP_201_CREATED)
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
