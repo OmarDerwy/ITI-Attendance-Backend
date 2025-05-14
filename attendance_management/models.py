@@ -118,7 +118,7 @@ class Schedule(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.name} - {self.track.name}"
+        return f"{self.name}"
 
 class Session(models.Model):
     # ForeignKey from nothing (leaf model)
