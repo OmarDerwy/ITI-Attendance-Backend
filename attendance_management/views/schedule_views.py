@@ -46,7 +46,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             'track',
             'custom_branch',
             ).prefetch_related(
-            Prefetch('sessions', queryset=Session.objects.select_related('schedule', 'track')),
+            Prefetch('sessions', queryset=Session.objects.select_related('schedule')),
             Prefetch('attendance_records', queryset=AttendanceRecord.objects.select_related('student', 'student__user', 'student__track', 'schedule')),
             # Prefetch students and their attendance_records and permission_requests for absence calculations
             Prefetch(
