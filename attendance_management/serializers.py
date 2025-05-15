@@ -14,7 +14,7 @@ class MiniTrackSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 class ScheduleSerializer(serializers.ModelSerializer):
-    track = serializers.SerializerMethodField()  # Read-only field for track
+    track = MiniTrackSerializer(read_only=True)  # Read-only field for track
     sessions = serializers.SerializerMethodField()  # Updated to use SerializerMethodField
     
     class Meta:
@@ -34,13 +34,6 @@ class ScheduleSerializer(serializers.ModelSerializer):
         if sessions is None:
             sessions = obj.sessions.all()
         return [str(session) for session in sessions]
-    
-    def get_track(self, obj):
-        # Use prefetched track if available
-        track = getattr(obj, 'prefetched_track', None)
-        if track is None:
-            track = obj.track
-        return {'id': track.id, 'name': track.name} if track else None
 
 class StudentSerializer(serializers.ModelSerializer):  # Updated to use Student
     class Meta:
