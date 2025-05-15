@@ -388,9 +388,7 @@ class EventAttendanceRecord(models.Model):
             raise ValidationError("Cannot have both student and guest for the same attendance record.")
         
         if not self.student and not self.guest:
-            raise ValidationError("Must provide either student or guest.")
-
-        # Validate based on event audience type
+            raise ValidationError("Must provide either student or guest.")        # Validate based on event audience type
         event_type = self.schedule.event.audience_type
         if self.student:
             if event_type == 'guests_only':
@@ -400,8 +398,8 @@ class EventAttendanceRecord(models.Model):
             if not self.student.track.is_active:
                 raise ValidationError("Student's track is not active.")
             # Check if student's track is allowed for this event
-            if self.schedule.target_tracks.exists():
-                if self.student.track not in self.schedule.target_tracks.all():
+            if self.schedule.event.target_tracks.exists():
+                if self.student.track not in self.schedule.event.target_tracks.all():
                     raise ValidationError("Student's track is not allowed for this event.")
 
         if self.guest:
