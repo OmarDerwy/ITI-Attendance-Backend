@@ -10,6 +10,6 @@
   "filesCount": 1,
   "presets": {
     "requestType": "http",
-    "requestUrl": "http://localhost:8000/api/v1/"
+    "requestUrl": "{{backend_url}}"
   }
 }
