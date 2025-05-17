@@ -41,7 +41,6 @@ class CustomUser(AbstractUser):
     # ForeignKey from Track - related_name: tracks
     # OneToOne from Student - related_name: student_profile
     # OneToOne from Coordinator - related_name: coordinator
-    # ForeignKey from Branch (as branch_manager) - related_name: branches
     # ForeignKey from Track (as supervisor) - related_name: tracks
     # ForeignKey from LostItem - related_name: lost_items
     # ForeignKey from FoundItem - related_name: found_items

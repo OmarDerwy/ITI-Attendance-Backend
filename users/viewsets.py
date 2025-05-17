@@ -133,10 +133,18 @@ class UserViewSet(AbstractUserViewSet):
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'], url_path='supervisors')
+    @action(detail=False, methods=['get'], url_path='supervisors', permission_classes=[core_permissions.IsCoordinatorOrAboveUser])
     def supervisors_list(self, request):
-        group = Group.objects.get(name="supervisor")
-        data = self.queryset.filter(groups=group)
+        request_user = self.request.user
+        request_user_groups = request_user.groups.values_list('name', flat=True)
+        data = self.queryset.filter(groups__name="supervisor", is_active=True)
+        if 'admin' in request_user_groups:
+            return data
+        if 'branch-manager' in request_user_groups:
+            branch_of_request_user = request_user.branch
+        if 'coordinator' in request_user_groups:
+            branch_of_request_user = request_user.coordinator.branch
+        data = data.filter(Q(tracks=None) | Q(tracks__default_branch=branch_of_request_user)).distinct()
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
