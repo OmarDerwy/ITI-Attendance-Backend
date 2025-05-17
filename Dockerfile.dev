@@ -1,0 +1,41 @@
+# Use an official Python runtime as a parent image
+FROM python:3.12-bookworm
+
+# Set environment variables for application configuration
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY Pipfile Pipfile.lock /app/
+# Set the working directory in the container
+WORKDIR /app
+
+RUN pip install --upgrade pip && \
+    pip install pipenv && \
+    pipenv install --deploy --ignore-pipfile --system
+# Install system dependencies needed for various Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libc-dev \
+    libpq-dev \
+    libffi-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    python3-opencv \
+    libssl-dev \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+
+
+# Manual installation of packages that might cause conflicts
+RUN pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir hf_xet huggingface_hub[hf_xet]
+
+
+# Create directories for image uploads if they don't exist
+RUN mkdir -p /app/logs /app/found_item_images /app/lost_item_images
+
+# Make port 8000 available to the world outside this container
+EXPOSE 8000
+
+# Define the command to run your app using Uvicorn for ASGI support
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

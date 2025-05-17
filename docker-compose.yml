@@ -1,29 +1,34 @@
-# Docker Compose file for testing the Docker image
-version: '3'
+# Docker Compose file for development setup
+version: '3.9'
 
 services:
-  web:
-    build: .
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: backend-dev
+    volumes:
+      - .:/app
     ports:
       - "8000:8000"
-    environment:
-      - DEBUG=1
-      # Add other environment variables your application needs
-      # - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
-    # If you need a database, uncomment these lines
+    env_file:
+      - .env
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    # Uncomment below if you want to wait for db
     # depends_on:
     #   - db
-  
-  # Uncomment if you need a database service
-  # db:
-  #   image: postgres:13
-  #   environment:
-  #     - POSTGRES_PASSWORD=postgres
-  #     - POSTGRES_USER=postgres
-  #     - POSTGRES_DB=postgres
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
 
-# Uncomment if you're using database volumes
-# volumes:
-#   postgres_data:
+# Add a db service if needed, e.g. for Postgres
+#  db:
+#    image: postgres:15
+#    environment:
+#      POSTGRES_DB: mydb
+#      POSTGRES_USER: myuser
+#      POSTGRES_PASSWORD: mypassword
+#    ports:
+#      - "5432:5432"
+#    volumes:
+#      - pgdata:/var/lib/postgresql/data
+#
+#volumes:
+#  pgdata:
