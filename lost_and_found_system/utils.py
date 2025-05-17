@@ -13,6 +13,7 @@ from io import BytesIO
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from .models import ItemStatusChoices
+from ultralytics import YOLO  # Import YOLO from ultralytics
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ text_model = SentenceTransformer('all-MiniLM-L6-v2')
 # Initialize image captioning model (only done once when module loads)
 image_processor = None
 image_captioning_model = None
+yolo_model = None  # Initialize YOLOv8 model
 
 def load_image_captioning_model():
     """
@@ -41,30 +43,107 @@ def load_image_captioning_model():
             return False
     return True
 
+def load_yolo_model():
+    """
+    Lazy-load the YOLOv8 model when first needed.
+    """
+    global yolo_model
+    if yolo_model is None:
+        try:
+            logger.info("Loading YOLOv8 model...")
+            yolo_model = YOLO('yolov8n.pt')  # Load the smallest YOLOv8 model for efficiency
+            logger.info("YOLOv8 model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load YOLOv8 model: {e}")
+            # Fall back to existing methods if model fails to load
+            return False
+    return True
+
 def generate_image_caption(image_url):
     """
     Generate a textual description of an image using a pre-trained model.
+    First detects and crops the main object using YOLOv8, then generates
+    a caption for the cropped object using BLIP.
+    
+    Returns a tuple of:
+    - Full caption (combined YOLOv8 label and BLIP description)
+    - YOLOv8 object label
     """
     if not load_image_captioning_model():
-        return ""
+        return "", ""
         
     try:
-        # Download image from URL
-        img_response = requests.get(image_url)
-        image = Image.open(BytesIO(img_response.content)).convert('RGB')
+        # First detect and crop the main object
+        cropped_image, object_label = detect_and_crop_object(image_url)
         
-        # Process image for the model
-        inputs = image_processor(image, return_tensors="pt")
+        if cropped_image is None:
+            # If object detection failed, try the whole image
+            logger.info("Object detection failed, using the whole image instead.")
+            img_response = requests.get(image_url)
+            cropped_image = Image.open(BytesIO(img_response.content)).convert('RGB')
+        
+        # Process image for the BLIP model
+        inputs = image_processor(cropped_image, return_tensors="pt")
         
         # Generate caption
         outputs = image_captioning_model.generate(**inputs, max_length=30)
-        caption = image_processor.decode(outputs[0], skip_special_tokens=True)
+        blip_caption = image_processor.decode(outputs[0], skip_special_tokens=True)
         
-        logger.info(f"Generated caption for image: '{caption}'")
-        return caption
+        # Combine YOLOv8 label with BLIP caption if we have a label
+        if object_label:
+            full_caption = f"{object_label}: {blip_caption}"
+        else:
+            full_caption = blip_caption
+        
+        logger.info(f"Generated caption: '{full_caption}' (YOLO label: '{object_label}', BLIP: '{blip_caption}')")
+        return full_caption, object_label
     except Exception as e:
         logger.error(f"Error generating image caption: {e}")
-        return ""
+        return "", ""
+
+def detect_and_crop_object(image_url):
+    """
+    Use YOLOv8 to detect the main object in an image and crop it.
+    Returns the cropped image and the detected object label.
+    """
+    if not load_yolo_model():
+        logger.error("YOLOv8 model not available")
+        return None, ""
+
+    try:
+        # Download image from URL
+        img_response = requests.get(image_url)
+        img = Image.open(BytesIO(img_response.content)).convert('RGB')
+        img_np = np.array(img)
+        
+        # Run YOLOv8 detection
+        results = yolo_model(img_np)
+        
+        # Check if any objects were detected
+        if len(results[0].boxes) == 0:
+            logger.warning("No objects detected in image")
+            return img, ""
+        
+        # Get the box with highest confidence
+        boxes = results[0].boxes
+        confidences = boxes.conf.cpu().numpy()
+        best_box_idx = np.argmax(confidences)
+        
+        # Get the class label for the best box
+        class_id = int(boxes.cls[best_box_idx])
+        label = results[0].names[class_id]
+        
+        # Get coordinates for cropping (convert from xywh to xyxy)
+        x1, y1, x2, y2 = boxes.xyxy[best_box_idx].cpu().numpy().astype(int)
+        
+        # Crop the image
+        cropped_img = img.crop((x1, y1, x2, y2))
+        logger.info(f"Detected object '{label}' with confidence {confidences[best_box_idx]:.2f}")
+        
+        return cropped_img, label
+    except Exception as e:
+        logger.error(f"Error detecting object: {e}")
+        return None, ""
 
 def calculate_text_similarity(text1, text2):
     """
@@ -188,58 +267,71 @@ def match_lost_and_found_items(lost_item: LostItem, found_item: FoundItem):
     enhanced_text_similarity = 0
     
     if lost_item.image and found_item.image:
-        logger.info("Both items have images. Performing image-based caption generation.")
+        logger.info("Both items have images. Performing image-based object detection and caption generation.")
         
-        # Get captions from images
-        lost_caption = generate_image_caption(lost_item.image)
-        found_caption = generate_image_caption(found_item.image)
+        # Get captions and object labels from images using YOLOv8 and BLIP
+        lost_caption, lost_object_label = generate_image_caption(lost_item.image)
+        found_caption, found_object_label = generate_image_caption(found_item.image)
         
         logger.info(f"Lost Item AI Caption: \"{lost_caption}\"")
         logger.info(f"Found Item AI Caption: \"{found_caption}\"")
+        logger.info(f"Lost Item Object Label: \"{lost_object_label}\"")
+        logger.info(f"Found Item Object Label: \"{found_object_label}\"")
+        
+        # Calculate object label match similarity (1.0 if same, 0.0 if different)
+        object_label_similarity = 1.0 if lost_object_label and found_object_label and lost_object_label.lower() == found_object_label.lower() else 0.0
+        logger.info(f"OBJECT LABEL MATCH: {object_label_similarity:.1f}")
         
         if lost_caption and found_caption:
             # Calculate similarity between the captions
             caption_similarity = calculate_text_similarity(lost_caption, found_caption)
             logger.info(f"CAPTION-TO-CAPTION SIMILARITY: {caption_similarity:.4f}")
             
-            # Optionally enhance the original descriptions with captions
-            enhanced_lost_text = f"{lost_item.name} {lost_item.description} {lost_caption}"
-            enhanced_found_text = f"{found_item.name} {found_item.description} {found_caption}"
+            # Create rich semantic context by combining:
+            # 1. User-provided title and description
+            # 2. YOLOv8 object labels
+            # 3. BLIP-generated captions
+            enhanced_lost_text = f"{lost_item.name} {lost_item.description} {lost_object_label} {lost_caption}"
+            enhanced_found_text = f"{found_item.name} {found_item.description} {found_object_label} {found_caption}"
             
             logger.info(f"Enhanced Lost Item Description: \"{enhanced_lost_text}\"")
             logger.info(f"Enhanced Found Item Description: \"{enhanced_found_text}\"")
             
+            # Calculate similarity using the enhanced text descriptions
             enhanced_text_similarity = calculate_text_similarity(enhanced_lost_text, enhanced_found_text)
             logger.info(f"ENHANCED TEXT SIMILARITY: {enhanced_text_similarity:.4f}")
             
-            # Use enhanced similarity if available
-            text_similarity = (base_text_similarity + enhanced_text_similarity) / 2
-            logger.info(f"AVERAGED TEXT SIMILARITY: {text_similarity:.4f}")
+            # Weighted average - giving more weight to enhanced similarity
+            text_similarity = (base_text_similarity + 2 * enhanced_text_similarity) / 3
+            logger.info(f"WEIGHTED TEXT SIMILARITY: {text_similarity:.4f}")
         else:
             logger.info("Couldn't generate captions for one or both images. Using only base text similarity.")
             text_similarity = base_text_similarity
     else:
         logger.info("One or both items do not have images. Using only text similarity.")
-        text_similarity = base_text_similarity
-
-    # Calculate final similarity score with detailed weight breakdown
+        text_similarity = base_text_similarity    # Calculate final similarity score with detailed weight breakdown
     if not lost_item.image or not found_item.image:
         # If no images, use only text similarity
         combined_similarity = text_similarity
         logger.info(f"FINAL SIMILARITY SCORE: {combined_similarity:.4f} (100% text similarity)")
     else:
-        # With images, use a weighted combination without direct image similarity
-        text_weight = 0.6
-        caption_weight = 0.4
+        # With images, use a comprehensive weighted combination
+        text_weight = 0.4  # Weight for text similarity (titles + descriptions)
+        caption_weight = 0.3  # Weight for BLIP caption similarity
+        object_label_weight = 0.3  # Weight for YOLOv8 object label match
         
+        # Calculate weighted components
         text_component = text_weight * text_similarity
         caption_component = caption_weight * caption_similarity
+        object_label_component = object_label_weight * object_label_similarity
         
-        combined_similarity = text_component + caption_component
+        # Combine all components for final score
+        combined_similarity = text_component + caption_component + object_label_component
         
         logger.info(f"SIMILARITY COMPONENTS:")
         logger.info(f"- Text Similarity: {text_similarity:.4f} × {text_weight} = {text_component:.4f}")
         logger.info(f"- Caption Similarity: {caption_similarity:.4f} × {caption_weight} = {caption_component:.4f}")
+        logger.info(f"- Object Label Match: {object_label_similarity:.1f} × {object_label_weight} = {object_label_component:.4f}")
         logger.info(f"FINAL SIMILARITY SCORE: {combined_similarity:.4f}")
 
     # Create a MatchedItem if similarity exceeds threshold
