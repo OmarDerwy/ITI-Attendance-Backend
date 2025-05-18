@@ -122,10 +122,16 @@ class TrackSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class BranchSerializer(serializers.ModelSerializer):
-    branch_manager = serializers.StringRelatedField(read_only=True)  # Read-only field for branch manager
+    branch_manager = serializers.StringRelatedField()  # Read-only field for branch manager
+    branch_manager_id = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.filter(groups__name='branch-manager', is_active=True),
+        source='branch_manager',
+        write_only=True,
+        required=False
+    )
     class Meta:
         model = Branch
-        fields = ['id', 'name', 'branch_manager', 'latitude', 'longitude', 'location_url', 'radius']
+        fields = ['id', 'name', 'branch_manager', 'branch_manager_id', 'latitude', 'longitude', 'location_url', 'radius']
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field
