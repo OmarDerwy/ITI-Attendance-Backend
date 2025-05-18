@@ -158,7 +158,8 @@ class UserViewSet(AbstractUserViewSet):
         request_user_groups = request_user.groups.values_list('name', flat=True)
         data = self.queryset.filter(groups__name="supervisor", is_active=True)
         if 'admin' in request_user_groups:
-            return data
+            serializer = self.get_serializer(data, many=True)
+            return Response(serializer.data)
         if 'branch-manager' in request_user_groups:
             branch_of_request_user = request_user.branch
         if 'coordinator' in request_user_groups:
