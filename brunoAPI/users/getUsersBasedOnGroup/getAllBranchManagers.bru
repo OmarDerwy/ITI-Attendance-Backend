@@ -5,7 +5,11 @@ meta {
 }
 
 get {
-  url: {{backend_url}}accounts/users/branch-managers
+  url: {{backend_url}}accounts/users/branch-managers?available=true
   body: none
   auth: inherit
+}
+
+params:query {
+  available: true
 }

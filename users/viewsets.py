@@ -154,7 +154,11 @@ class UserViewSet(AbstractUserViewSet):
     @action(detail=False, methods=['get'], url_path='branch-managers', permission_classes=[core_permissions.IsAdminUser])
     def instructors_list(self, request):
         group = Group.objects.get(name="branch-manager")
+        is_available = request.query_params.get('available', None)
+        is_available = is_available.lower() == 'true' if is_available else False
         data = self.queryset.filter(groups=group, is_active=True)
+        if is_available:
+            data = data.filter(branch__isnull=True)
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
