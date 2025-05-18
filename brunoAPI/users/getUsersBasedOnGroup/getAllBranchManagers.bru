@@ -1,0 +1,11 @@
+meta {
+  name: getAllBranchManagers
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{backend_url}}accounts/users/branch-managers
+  body: none
+  auth: inherit
+}
