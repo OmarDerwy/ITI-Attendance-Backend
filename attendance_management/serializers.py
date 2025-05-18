@@ -3,6 +3,8 @@ from .models import Schedule, Session, Student, Track, Branch, AttendanceRecord,
 from users.models import CustomUser
 from datetime import datetime, timedelta
 from django.core.exceptions import ValidationError
+from django.db.models import Count, Q
+
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
@@ -325,7 +327,23 @@ class StudentWithWarningSerializer(serializers.ModelSerializer):
 class GuestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Guest
-        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'date_of_birth', 'national_id', 'college_name', 'university_name','gradyear', 'degree_level']
+        fields = ['id', 'user', 'date_of_birth', 'national_id', 'college_name', 'university_name','gradyear', 'degree_level']
+
+class EventSessionSerializer(serializers.ModelSerializer):
+    speaker = serializers.CharField(source='instructor') 
+
+    class Meta:
+        model = Session
+        fields = [
+            'id',
+            'title',
+            'speaker',
+            'start_time',
+            'end_time',
+            'session_type',
+            'room',
+            'schedule'
+        ]
 
 class EventSerializer(serializers.ModelSerializer):
     target_tracks = MiniTrackSerializer(many=True, read_only=True)
@@ -336,37 +354,72 @@ class EventSerializer(serializers.ModelSerializer):
         required=False,
         source='target_tracks'
     )
+    sessions = serializers.SerializerMethodField()
     attendance_stats = serializers.SerializerMethodField()
+    title = serializers.CharField(source='schedule.name', read_only=True)
+    branch = serializers.PrimaryKeyRelatedField(source='schedule.custom_branch', read_only=True)
+    branch_name = serializers.CharField(source='schedule.custom_branch.name', read_only=True)
 
     class Meta:
         model = Event
         fields = [
             'id',
+            'title',
             'description',
+            'branch',
+            'branch_name',
             'audience_type',
             'is_mandatory',
             'created_at',
             'updated_at',
             'target_tracks',
             'target_track_ids',
+            'sessions',
             'attendance_stats'
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def get_attendance_stats(self, obj):
+    def get_sessions(self, obj):
         if hasattr(obj, 'schedule'):
-            total_registered = EventAttendanceRecord.objects.filter(schedule=obj.schedule).count()
-            total_attended = EventAttendanceRecord.objects.filter(
-                schedule=obj.schedule,
-                status='attended'
-            ).count()
-            return {
-                'registered': total_registered,
-                'attended': total_attended,
-                'attendance_rate': round((total_attended / total_registered * 100), 2) if total_registered > 0 else 0
-            }
-        return None
+            sessions = obj.schedule.sessions.all()
+            return EventSessionSerializer(sessions, many=True).data
+        return []
 
+    def get_attendance_stats(self, obj):
+        """
+        Get attendance statistics for the event using aggregation.
+        """
+        if obj.schedule:
+            records = obj.schedule.event_attendance_records.all()
+
+            total_registered = records.count()
+            total_attended = records.filter(status='attended').count()
+
+            student_records = records.filter(student__isnull=False).aggregate(
+                registered=Count('id'),
+                attended=Count('id', filter=Q(status='attended'))
+            )
+            guest_records = records.filter(guest__isnull=False).aggregate(
+                registered=Count('id'),
+                attended=Count('id', filter=Q(status='attended'))
+            )
+
+            return {
+                'total': {
+                    'registered': total_registered,
+                    'attended': total_attended,
+                    'attendance_rate': round((total_attended / total_registered * 100), 2) if total_registered > 0 else 0
+                },
+                'students': {
+                    'registered': student_records['registered'],
+                    'attended': student_records['attended']
+                },
+                'guests': {
+                    'registered': guest_records['registered'],
+                    'attended': guest_records['attended']
+                }
+            }
+        
 class EventAttendanceRecordSerializer(serializers.ModelSerializer):
     student_details = serializers.SerializerMethodField(read_only=True)
     guest_details = serializers.SerializerMethodField(read_only=True)
@@ -390,11 +443,24 @@ class EventAttendanceRecordSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def validate(self, data):
-        """Let model validation handle core business rules"""
-        try:
-            instance = EventAttendanceRecord(**data)
-            instance.full_clean()
-        except ValidationError as e:
-            raise serializers.ValidationError(e.messages)
-        return data
+    def get_student_details(self, obj):
+        if obj.student:
+            return {
+                "first_name": obj.student.user.first_name,
+                "last_name": obj.student.user.last_name
+            }
+        return None
+
+    def get_guest_details(self, obj):
+        if obj.guest:
+            return {
+                "first_name": obj.guest.user.first_name,
+                "last_name": obj.guest.user.last_name
+            }
+        return None
+
+    def get_schedule_details(self, obj):
+        return {
+            'id': obj.schedule.id,
+            'name': obj.schedule.name
+        }

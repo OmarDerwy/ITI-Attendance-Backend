@@ -84,7 +84,13 @@ class Event(models.Model):
         blank=True,
         help_text="Specific tracks that can attend this event. Leave empty for all tracks."
     )
-    
+    @property
+    def title(self):
+        return self.schedule.name if hasattr(self, 'schedule') else None
+
+    @property
+    def branch(self):
+        return self.schedule.custom_branch if hasattr(self, 'schedule') else None
 class Schedule(models.Model):
     # ForeignKey from Session - related_name: sessions
     # ForeignKey from AttendanceRecord - related_name: attendance_records
@@ -103,7 +109,7 @@ class Schedule(models.Model):
     is_shared = models.BooleanField(default=False)
     event = models.OneToOneField(
         Event,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,  # Changed from SET_NULL to CASCADE
         related_name='schedule',
         null=True,
         blank=True
