@@ -122,9 +122,10 @@ class TrackSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class BranchSerializer(serializers.ModelSerializer):
+    branch_manager = serializers.StringRelatedField(read_only=True)  # Read-only field for branch manager
     class Meta:
         model = Branch
-        fields = ['id', 'name', 'latitude', 'longitude', 'location_url', 'radius']
+        fields = ['id', 'name', 'branch_manager', 'latitude', 'longitude', 'location_url', 'radius']
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()  # updated student field

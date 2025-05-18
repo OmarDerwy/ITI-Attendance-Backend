@@ -6,6 +6,7 @@ from ..serializers import PermissionRequestSerializer
 from core.permissions import IsSupervisorOrAboveUser, IsStudentOrAboveUser
 from lost_and_found_system.utils import send_and_save_notification  # Import the notification function
 from rest_framework import status
+from datetime import datetime
 
 class PermissionRequestViewSet(viewsets.ModelViewSet):
     """
@@ -104,8 +105,6 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         approver_role = "supervisor"
         if user.groups.filter(name='coordinator').exists():
             approver_role = "coordinator"
-        adjusted_time = request.data.get('adjusted_time')
-        permission_request.adjusted_time = adjusted_time
         permission_request.status = 'approved'
         permission_request.save()
         
@@ -117,7 +116,7 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
         notification_message = (
         f"Your {request_type_display} request for {schedule.name} on "
         f"{schedule.created_at.strftime('%d %b, %Y')} has been approved by your {approver_role}. "
-        f"Adjusted time: {permission_request.adjusted_time.strftime('%H:%M') if permission_request.adjusted_time else 'N/A'}"
+        f"Adjusted time: {datetime.strftime(permission_request.adjusted_time, '%H:%M') if permission_request.adjusted_time else 'N/A'}. " #TODO change notification text for name of schedule
     )
         
         send_and_save_notification(
