@@ -14,6 +14,7 @@ class UserAdmin(BaseUserAdmin):
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
     ordering = ['email']
-    list_display = ('email', 'first_name', 'last_name', 'is_staff', 'is_superuser')
+    list_display = ('id','email', 'first_name', 'last_name', 'is_staff', 'is_superuser')
+    search_fields = ('email', 'first_name', 'last_name')
 admin.site.register(User, UserAdmin)
 # admin.site.register(Group)
