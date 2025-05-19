@@ -234,7 +234,7 @@ class EventViewSet(viewsets.ModelViewSet):
             ) for student in students
         )
         
-    @action(detail=True, methods=['POST'],url_path='register', permission_classes=[IsStudentOrAboveUser])
+    @action(detail=True, methods=['POST'], url_path='register', permission_classes=[IsStudentOrAboveUser])
     def register(self, request, pk=None):
         """
         Register for an event.
@@ -244,13 +244,14 @@ class EventViewSet(viewsets.ModelViewSet):
         try:
             event = self.get_object()
             user = request.user
-            
+
             #check if event is in the future
             if event.schedule.created_at < timezone.now().date():
                 return Response(
                     {"error": "Cannot register for past events"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
 
             # Check if already registered
             existing_registration = EventAttendanceRecord.objects.filter(
@@ -267,15 +268,14 @@ class EventViewSet(viewsets.ModelViewSet):
             # Handle student registration
             if hasattr(user, 'student_profile'):
                 student = user.student_profile
-                
+
                 # Validate student can register
                 if event.audience_type == 'guests_only':
                     return Response(
                         {"error": "This event is for guests only"},
-                        
                         status=status.HTTP_403_FORBIDDEN
                     )
-                
+
                 if event.target_tracks.exists() and student.track not in event.target_tracks.all():
                     return Response(
                         {"error": "Your track is not eligible for this event"},
@@ -287,6 +287,7 @@ class EventViewSet(viewsets.ModelViewSet):
                     student=student,
                     status='registered'
                 )
+                event.registered_students += 1  # Increment student count
 
             # Handle guest registration
             elif hasattr(user, 'guest_profile'):
@@ -301,12 +302,15 @@ class EventViewSet(viewsets.ModelViewSet):
                     guest=user.guest_profile,
                     status='registered'
                 )
+                event.registered_guests += 1  # Increment guest count
 
             else:
                 return Response(
                     {"error": "Invalid user type"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            event.save()  # Save the updated event
 
             return Response(
                 EventAttendanceRecordSerializer(attendance_record).data,

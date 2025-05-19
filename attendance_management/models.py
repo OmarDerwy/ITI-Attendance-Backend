@@ -84,6 +84,12 @@ class Event(models.Model):
         blank=True,
         help_text="Specific tracks that can attend this event. Leave empty for all tracks."
     )
+    registered_students = models.PositiveIntegerField(default=0)
+    attended_students = models.PositiveIntegerField(default=0)
+    registered_guests = models.PositiveIntegerField(default=0)
+    attended_students = models.PositiveIntegerField(default=0)
+
+
     @property
     def title(self):
         return self.schedule.name if hasattr(self, 'schedule') else None
@@ -91,6 +97,7 @@ class Event(models.Model):
     @property
     def branch(self):
         return self.schedule.custom_branch if hasattr(self, 'schedule') else None
+
 class Schedule(models.Model):
     # ForeignKey from Session - related_name: sessions
     # ForeignKey from AttendanceRecord - related_name: attendance_records
