@@ -7,7 +7,7 @@ from django.utils.dateparse import parse_datetime  # Import parse_datetime
 from ..models import Event, EventAttendanceRecord, Student, Guest, Schedule, Track, Session, Branch  # Import Branch
 from ..serializers import EventSerializer, EventAttendanceRecordSerializer, EventSessionSerializer
 from core.permissions import IsCoordinatorOrAboveUser, IsStudentOrAboveUser, IsGuestOrAboveUser
-from django.db.models import Q
+from django.db.models import Q, Count
 import logging
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class EventViewSet(viewsets.ModelViewSet):
                     is_shared=True
                 )
 
-                # 4. Create sessions (optimized with bulk_create)
+                # 4. Create sessions 
                 sessions_data = request.data.get('sessions', [])
                 sessions_to_create = []
                 for session_data in sessions_data:
@@ -109,7 +109,6 @@ class EventViewSet(viewsets.ModelViewSet):
 
 
     def get_queryset(self):
-        user = self.request.user
         base_queryset = Event.objects.all()
 
         return base_queryset.prefetch_related(
@@ -147,6 +146,76 @@ class EventViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    def update(self, request, *args, **kwargs):
+        try:
+            with transaction.atomic():
+                event = self.get_object()
+
+                # 1. Update event fields
+                event.description = request.data.get('description', event.description)
+                event.audience_type = request.data.get('audience_type', event.audience_type)
+                event.is_mandatory = request.data.get('is_mandatory', event.is_mandatory)
+                event.save()
+
+                # 2. Update schedule
+                schedule = event.schedule
+                if 'event_date' in request.data:
+                    schedule.created_at = parse_datetime(request.data.get('event_date')).date()
+                    schedule.save()
+
+                # 3. Update sessions
+                sessions_data = request.data.get('sessions', [])
+                if sessions_data:
+                    # Delete old sessions
+                    schedule.sessions.all().delete()
+
+                    # Create new sessions
+                    new_sessions = []
+                    for session_data in sessions_data:
+                        new_sessions.append(
+                            Session(
+                                schedule=schedule,
+                                title=session_data['title'],
+                                instructor=session_data.get('speaker'),
+                                start_time=parse_datetime(session_data['start_time']),
+                                end_time=parse_datetime(session_data['end_time']),
+                                session_type=session_data.get('session_type', 'offline'),
+                            )
+                        )
+                    Session.objects.bulk_create(new_sessions)
+
+                # 4. Update target tracks and handle auto-registration
+                old_target_tracks = set(event.target_tracks.all())
+                new_target_track_ids = request.data.get('target_track_ids', [])
+                new_tracks = Track.objects.filter(
+                    id__in=new_target_track_ids,
+                    is_active=True,
+                    default_branch=request.user.coordinator.branch
+                )
+                new_target_tracks = set(new_tracks)
+
+                if old_target_tracks != new_target_tracks:
+                    # Delete existing attendance records for the event
+                    EventAttendanceRecord.objects.filter(schedule=schedule).delete()
+
+                    event.target_tracks.set(new_tracks)  # Update target tracks
+
+                    # Auto-register students if mandatory and target tracks exist
+                    if event.is_mandatory and event.target_tracks.exists():
+                        self._auto_register_students(event)
+                    elif event.is_mandatory and not event.target_tracks.exists() and event.audience_type in ['students_only', 'both']:
+                        # Auto-register all active students if mandatory and no target tracks
+                        students = Student.objects.filter(user__is_active=True, track__is_active=True)
+                        EventAttendanceRecord.objects.bulk_create([
+                            EventAttendanceRecord(schedule=schedule, student=student, status='registered')
+                            for student in students
+                        ])
+
+                return Response(self.get_serializer(event).data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
     def _auto_register_students(self, event):
         """Helper method to automatically register students for mandatory events"""
@@ -164,7 +233,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 status='registered'
             ) for student in students
         )
-
+        
     @action(detail=True, methods=['POST'],url_path='register', permission_classes=[IsStudentOrAboveUser])
     def register(self, request, pk=None):
         """
@@ -175,6 +244,13 @@ class EventViewSet(viewsets.ModelViewSet):
         try:
             event = self.get_object()
             user = request.user
+            
+            #check if event is in the future
+            if event.schedule.created_at < timezone.now().date():
+                return Response(
+                    {"error": "Cannot register for past events"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             # Check if already registered
             existing_registration = EventAttendanceRecord.objects.filter(
@@ -242,3 +318,46 @@ class EventViewSet(viewsets.ModelViewSet):
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    @action(detail=True, methods=['GET'], url_path='attendance_stats')
+    def get_attendance_stats(self, request, pk=None):
+        """
+        Retrieve attendance statistics for a specific event.
+        """
+        try:
+            event = self.get_object()
+            if event.schedule:
+                records = event.schedule.event_attendance_records.all()
+
+                total_registered = records.count()
+                total_attended = records.filter(status='attended').count()
+
+                student_records = records.filter(student__isnull=False).aggregate(
+                    registered=Count('id'),
+                    attended=Count('id', filter=Q(status='attended'))
+                )
+                guest_records = records.filter(guest__isnull=False).aggregate(
+                    registered=Count('id'),
+                    attended=Count('id', filter=Q(status='attended'))
+                )
+
+                data = {
+                    'total': {
+                        'registered': total_registered,
+                        'attended': total_attended,
+                        'attendance_rate': round((total_attended / total_registered * 100), 2) if total_registered > 0 else 0
+                    },
+                    'students': {
+                        'registered': student_records['registered'],
+                        'attended': student_records['attended']
+                    },
+                    'guests': {
+                        'registered': guest_records['registered'],
+                        'attended': guest_records['attended']
+                    }
+                }
+                return Response(data, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "Event has no schedule."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

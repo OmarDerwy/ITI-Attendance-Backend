@@ -354,8 +354,7 @@ class EventSerializer(serializers.ModelSerializer):
         required=False,
         source='target_tracks'
     )
-    sessions = serializers.SerializerMethodField()
-    attendance_stats = serializers.SerializerMethodField()
+    sessions = EventSessionSerializer(many=True, required=False)  
     title = serializers.CharField(source='schedule.name', read_only=True)
     branch = serializers.PrimaryKeyRelatedField(source='schedule.custom_branch', read_only=True)
     branch_name = serializers.CharField(source='schedule.custom_branch.name', read_only=True)
@@ -375,7 +374,6 @@ class EventSerializer(serializers.ModelSerializer):
             'target_tracks',
             'target_track_ids',
             'sessions',
-            'attendance_stats'
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -385,41 +383,41 @@ class EventSerializer(serializers.ModelSerializer):
             return EventSessionSerializer(sessions, many=True).data
         return []
 
-    def get_attendance_stats(self, obj):
-        """
-        Get attendance statistics for the event using aggregation.
-        """
-        if obj.schedule:
-            records = obj.schedule.event_attendance_records.all()
+    # def get_attendance_stats(self, obj):
+    #     """
+    #     Get attendance statistics for the event using aggregation.
+    #     """
+    #     if obj.schedule:
+    #         records = obj.schedule.event_attendance_records.all()
 
-            total_registered = records.count()
-            total_attended = records.filter(status='attended').count()
+    #         total_registered = records.count()
+    #         total_attended = records.filter(status='attended').count()
 
-            student_records = records.filter(student__isnull=False).aggregate(
-                registered=Count('id'),
-                attended=Count('id', filter=Q(status='attended'))
-            )
-            guest_records = records.filter(guest__isnull=False).aggregate(
-                registered=Count('id'),
-                attended=Count('id', filter=Q(status='attended'))
-            )
+    #         student_records = records.filter(student__isnull=False).aggregate(
+    #             registered=Count('id'),
+    #             attended=Count('id', filter=Q(status='attended'))
+    #         )
+    #         guest_records = records.filter(guest__isnull=False).aggregate(
+    #             registered=Count('id'),
+    #             attended=Count('id', filter=Q(status='attended'))
+    #         )
 
-            return {
-                'total': {
-                    'registered': total_registered,
-                    'attended': total_attended,
-                    'attendance_rate': round((total_attended / total_registered * 100), 2) if total_registered > 0 else 0
-                },
-                'students': {
-                    'registered': student_records['registered'],
-                    'attended': student_records['attended']
-                },
-                'guests': {
-                    'registered': guest_records['registered'],
-                    'attended': guest_records['attended']
-                }
-            }
-        
+    #         return {
+    #             'total': {
+    #                 'registered': total_registered,
+    #                 'attended': total_attended,
+    #                 'attendance_rate': round((total_attended / total_registered * 100), 2) if total_registered > 0 else 0
+    #             },
+    #             'students': {
+    #                 'registered': student_records['registered'],
+    #                 'attended': student_records['attended']
+    #             },
+    #             'guests': {
+    #                 'registered': guest_records['registered'],
+    #                 'attended': guest_records['attended']
+    #             }
+    #         }
+
 class EventAttendanceRecordSerializer(serializers.ModelSerializer):
     student_details = serializers.SerializerMethodField(read_only=True)
     guest_details = serializers.SerializerMethodField(read_only=True)
