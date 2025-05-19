@@ -7,6 +7,7 @@ from attendance_management.views.student_views import StudentViewSet
 from attendance_management.views.track_views import TrackViewSet
 from attendance_management.views.permission_request_views import PermissionRequestViewSet
 from attendance_management.views.attendance_views import AttendanceViewSet
+from attendance_management.views.event_views import EventAttendanceViewSet
 from attendance_management.views.settings_views import get_absence_thresholds, update_absence_thresholds
 from attendance_management.views.event_views import EventViewSet  
 
