@@ -13,6 +13,9 @@ from io import BytesIO
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from .models import ItemStatusChoices
+import time
+import os
+import re
 
 
 logger = logging.getLogger(__name__)
@@ -300,16 +303,129 @@ def send_and_save_notification(user, title, message, match_id=None):
     channel_layer = get_channel_layer()
     group_name = f"user_{user.id}" if user.is_authenticated else "anonymous"
     
-    notification_data = {
+    notification_data_ws = { # Renamed to avoid conflict
         "type": "send_notification",
-        "message": {
-            "title": title,
-            "body": message,
-            "matched_item_id": match_id  # Changed from notification_id to matched_item_id
-        }
+        "message": {"title": title, "body": message, "matched_item_id": match_id}
     }
     
     logger.info(f"Sending notification to {user.email}: {title} - {message}")
-    async_to_sync(channel_layer.group_send)(group_name, notification_data)
+    async_to_sync(channel_layer.group_send)(group_name, notification_data_ws)
     
     return notification
+
+def check_description_relevance(item_name, description):
+    """
+    Uses a Hugging Face model to check if the description is relevant to the item name.
+    Returns 'relevant', 'irrelevant', or 'api_error'.
+    """
+    try:
+        hf_api_key = os.environ.get("HUGGINGFACE_API_KEY")
+        if not hf_api_key:
+            logger.error("HUGGINGFACE_API_KEY environment variable not set.")
+            return "api_error"
+
+        api_url = "https://router.huggingface.co/novita/v3/openai/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {hf_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        prompt_text = (
+            f"Analyze the following item and its description. Based *only* on whether the description accurately describes the item itself (like its appearance, color, brand, or specific features), "
+            f"and not about where/when it was lost/found or if the description is generic, "
+            f"reply with a single word: 'relevant' if the description is about the item's characteristics, or 'irrelevant' otherwise.\\n\\n"
+            f"Item Name: '{item_name}'\\n"
+            f"Description: '{description}'\\n\\n"
+            f"Your one-word answer:"
+        )
+
+        payload = {
+            "model": "deepseek/deepseek-v3-0324",
+            "messages": [{"role": "user", "content": prompt_text}],
+            "max_tokens": 5, # Max length for 'relevant' or 'irrelevant'
+            "temperature": 0.1 # Low temperature for deterministic output
+        }
+        
+        max_retries = 3
+        last_exception = None # To store the last exception for logging if all retries fail
+
+        for attempt in range(max_retries):
+            response_obj = None # To ensure response_obj is defined for logging in HTTPError
+            try:
+                response_obj = requests.post(api_url, headers=headers, json=payload, timeout=10)
+                response_obj.raise_for_status()  # Will raise an HTTPError for bad responses (4xx or 5xx)
+                result = response_obj.json()
+                last_exception = None # Clear last exception on successful request processing
+                
+                # Robust check for the expected response structure
+                if result.get("choices") and \
+                   isinstance(result["choices"], list) and \
+                   len(result["choices"]) > 0 and \
+                   result["choices"][0].get("message") and \
+                   isinstance(result["choices"][0]["message"], dict) and \
+                   "content" in result["choices"][0]["message"]:
+                    
+                    answer = result["choices"][0]["message"]["content"].strip().lower()
+                    
+                    if answer == "relevant": # Strict check
+                        logger.info(f"Hugging Face API response: '{answer}' -> relevant")
+                        return "relevant"
+                    elif answer == "irrelevant": # Strict check
+                        logger.info(f"Hugging Face API response: '{answer}' -> irrelevant")
+                        return "irrelevant"
+                    else:
+                        # Model returned something other than 'relevant' or 'irrelevant'
+                        logger.warning(f"Hugging Face API returned ambiguous answer: '{answer}' on attempt {attempt+1}/{max_retries}.")
+                        # This attempt is considered failed, will proceed to retry logic below.
+                
+                else: # Unexpected response structure
+                    logger.warning(f"Hugging Face API response structure unexpected on attempt {attempt+1}/{max_retries}: {result}")
+                    # This attempt is considered failed, will proceed to retry logic below.
+
+            except requests.exceptions.HTTPError as e:
+                last_exception = e
+                logger.warning(f"Hugging Face API HTTP error on attempt {attempt+1}/{max_retries}: {e}")
+                # Check if response_obj is available (it should be if raise_for_status() was called)
+                if hasattr(e, 'response') and e.response is not None and e.response.status_code == 429:
+                    wait_time = (2 ** attempt) * 2  # Exponential backoff: 2, 4, 8 seconds
+                    logger.info(f"Rate limited. Waiting {wait_time} seconds before retry.")
+                    time.sleep(wait_time)
+                    continue  # Continue to the next attempt
+                # For other HTTP errors, fall through to generic retry wait
+            
+            except requests.exceptions.RequestException as e: # Catches DNS errors, connection timeouts, etc.
+                last_exception = e
+                logger.warning(f"Hugging Face API request error on attempt {attempt+1}/{max_retries}: {e}")
+                # Fall through to generic retry wait
+            
+            except Exception as e: # Catch any other unexpected errors (e.g., JSONDecodeError)
+                last_exception = e
+                logger.error(f"Unexpected error during Hugging Face API call processing attempt {attempt+1}/{max_retries}: {e}")
+                # Fall through to generic retry wait
+
+            # If this was the last attempt and we haven't returned a definitive answer
+            if attempt == max_retries - 1:
+                logger.error(f"All {max_retries} attempts failed or yielded no definitive answer. Last error/issue: {last_exception if last_exception else 'Ambiguous or malformed response'}")
+                break # Exit loop, will fall through to return "api_error"
+            
+            # Generic wait for the next retry, if not a 429 (which has its own 'continue' statement)
+            # This wait applies if the response was ambiguous, structure was wrong, or a non-429 HTTP/Request error occurred.
+            
+            # Check if the last exception was a 429 to avoid double waiting
+            is_429 = isinstance(last_exception, requests.exceptions.HTTPError) and \
+                      hasattr(last_exception, 'response') and \
+                      last_exception.response is not None and \
+                      last_exception.response.status_code == 429
+            
+            if not is_429:
+                wait_time = (2 ** attempt) * 1 # Exponential backoff: 1, 2 seconds (for the first two retries)
+                logger.info(f"Waiting {wait_time} seconds before next retry (attempt {attempt+2}/{max_retries}).")
+                time.sleep(wait_time)
+
+        # If loop finished without returning "relevant" or "irrelevant" (i.e., all retries exhausted)
+        logger.warning("Hugging Face API calls exhausted or consistently failed to provide a clear answer. Defaulting to api_error.")
+        return "api_error"
+
+    except Exception as e: # Catch errors in the setup before the loop (e.g. critical error not related to API call itself)
+        logger.error(f"Critical error in relevance check function's outer scope: {e}")
+        return "api_error"
