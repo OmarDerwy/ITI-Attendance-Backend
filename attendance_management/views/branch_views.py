@@ -2,6 +2,8 @@ from rest_framework import viewsets
 from ..models import Branch
 from ..serializers import BranchSerializer
 from core import permissions
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 class BranchViewSet(viewsets.ModelViewSet):
     queryset = Branch.objects.all().order_by('id')
@@ -9,17 +11,24 @@ class BranchViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsSupervisorOrAboveUser]
     pagination_class = None 
 
-    def get_queryset(self):
-        user = self.request.user
-        groups = user.groups.values_list('name', flat=True)
-        queryset = self.queryset
-        print(queryset)
-
-        if 'coordinator' in groups:
-            # Get the branch where the user is the coordinator
-            return queryset.filter(coordinators__user=user)
-        elif 'admin' in groups:
-            # Admin can see all branches
-            return queryset
+    @action(detail=False, methods=['get'], url_path='own-branch')
+    def get_own_branch(self, request):
+        """
+        Get the branch of the logged-in user.
+        """
+        user = request.user
+        if hasattr(user, 'branch'):
+            branch = user.branch
+            branch = [branch]
+            serializer = self.get_serializer(branch, many=True)
+            return Response(serializer.data)
+        elif hasattr(user, 'coordinator'):
+            # If the user is a coordinator, get the branch through the coordinator
+            branch = user.coordinator.branch
+            branch = [branch]
+            serializer = self.get_serializer(branch, many=True)
+            return Response(serializer.data)
         else:
-            return Branch.objects.none()
+            all_branches = self.queryset
+            serializer = self.get_serializer(all_branches, many=True)
+            return Response(serializer.data)
