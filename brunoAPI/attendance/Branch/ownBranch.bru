@@ -1,0 +1,11 @@
+meta {
+  name: ownBranch
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{backend_url}}attendance/branches/own-branch/
+  body: multipartForm
+  auth: inherit
+}
