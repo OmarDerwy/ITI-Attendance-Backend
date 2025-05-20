@@ -236,7 +236,12 @@ class SessionViewSet(viewsets.ModelViewSet):
         """
         Retrieve calendar data by joining schedules with sessions.
         """
-        track_id = request.query_params.get('track_id')
+        request_user = self.request.user
+        if not hasattr(request_user, 'student_profile'):
+            track_id = request.query_params.get('track_id')
+        else:
+            student = request_user.student_profile
+            track_id = student.track.id
 
         # Ensure track filter is mandatory
         if not track_id:
