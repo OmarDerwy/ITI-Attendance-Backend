@@ -11,7 +11,6 @@ from ..models import Event, EventAttendanceRecord, Student, Guest, Schedule, Tra
 from ..serializers import EventSerializer, EventAttendanceRecordSerializer, EventSessionSerializer
 from core.permissions import IsCoordinatorOrAboveUser, IsStudentOrAboveUser, IsGuestOrAboveUser
 from django.db.models import Q, Count
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -333,49 +332,19 @@ class EventViewSet(viewsets.ModelViewSet):
         """
         try:
             event = self.get_object()
-            if event.schedule:
-                records = event.schedule.event_attendance_records.all()
-
-                total_registered = records.count()
-                total_attended = records.filter(status='attended').count()
-
-                student_records = records.filter(student__isnull=False).aggregate(
-                    registered=Count('id'),
-                    attended=Count('id', filter=Q(status='attended'))
-                )
-                guest_records = records.filter(guest__isnull=False).aggregate(
-                    registered=Count('id'),
-                    attended=Count('id', filter=Q(status='attended'))
-                )
-
-                data = {
-                    'total': {
-                        'registered': total_registered,
-                        'attended': total_attended,
-                        'attendance_rate': round((total_attended / total_registered * 100), 2) if total_registered > 0 else 0
-                    },
-                    'students': {
-                        'registered': student_records['registered'],
-                        'attended': student_records['attended']
-                    },
-                    'guests': {
-                        'registered': guest_records['registered'],
-                        'attended': guest_records['attended']
-                    }
-                }
-                return Response(data, status=status.HTTP_200_OK)
-            else:
-                return Response({"error": "Event has no schedule."}, status=status.HTTP_400_BAD_REQUEST)
+            data = {
+                'attended_students': event.attended_students,
+                'attended_guests': event.attended_guests,
+                'registered_students': event.registered_students,
+                'registered_guests': event.registered_guests,
+                'total_attendance': event.attended_students + event.attended_guests,
+                'total_registered': event.registered_students + event.registered_guests,
+            }
+            return Response(data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-from attendance_management.models import (
-    EventAttendanceRecord, Schedule, Student, Guest, Event
-)
-from attendance_management.serializers import EventAttendanceRecordSerializer
-from users.models import CustomUser
 
-logger = logging.getLogger(__name__)
 
 class EventAttendanceViewSet(viewsets.ViewSet):
     """
@@ -548,6 +517,14 @@ class EventAttendanceViewSet(viewsets.ViewSet):
             attendance_record.check_in_time = current_time
             attendance_record.status = 'attended'
             attendance_record.save(update_fields=['check_in_time', 'status'])
+
+            # Increment attended counts on the Event model
+            event = matching_schedule.event  
+            if attendee_type == 'student':
+                event.attended_students += 1
+            else:
+                event.attended_guests += 1
+            event.save()  
             
             logger.info(f"Event check-in recorded for {attendee_type} {user.email} at {branch.name}")
             

@@ -87,7 +87,7 @@ class Event(models.Model):
     registered_students = models.PositiveIntegerField(default=0)
     attended_students = models.PositiveIntegerField(default=0)
     registered_guests = models.PositiveIntegerField(default=0)
-    attended_students = models.PositiveIntegerField(default=0)
+    attended_guests = models.PositiveIntegerField(default=0)
 
 
     @property
