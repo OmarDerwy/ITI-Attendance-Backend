@@ -6,6 +6,7 @@ from django.utils import timezone
 import math
 import logging
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from django.utils.dateparse import parse_datetime  # Import parse_datetime
 from ..models import Event, EventAttendanceRecord, Student, Guest, Schedule, Track, Session, Branch  # Import Branch
 from ..serializers import EventSerializer, EventAttendanceRecordSerializer, EventSessionSerializer
@@ -15,6 +16,11 @@ from django.db.models import Q, Count
 logger = logging.getLogger(__name__)
 
 from attendance_management.models import Event
+
+class EventAttendancePagination(PageNumberPagination):
+    page_size = 5
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
@@ -325,25 +331,63 @@ class EventViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-    @action(detail=True, methods=['GET'], url_path='attendance_stats')
-    def get_attendance_stats(self, request, pk=None):
+    @action(detail=True, methods=['GET'], url_path='guest_details')
+    def get_guest_details(self, request, pk=None):
         """
-        Retrieve attendance statistics for a specific event.
+        Retrieve guest details for a specific event, separated into enrolled and attended.
         """
         try:
             event = self.get_object()
+
+            # Get enrolled guests
+            enrolled_guests = EventAttendanceRecord.objects.filter(
+                schedule=event.schedule,
+                guest__isnull=False,
+            ).select_related('guest__user')  # Optimize query
+
+            # Get attended guests
+            attended_guests = EventAttendanceRecord.objects.filter(
+                schedule=event.schedule,
+                guest__isnull=False,
+                status='attended'
+            ).select_related('guest__user')  # Optimize query
+
+            # Serialize the data
+            enrolled_serializer = EventAttendanceRecordSerializer(enrolled_guests, many=True)
+            attended_serializer = EventAttendanceRecordSerializer(attended_guests, many=True)
+
             data = {
-                'attended_students': event.attended_students,
-                'attended_guests': event.attended_guests,
-                'registered_students': event.registered_students,
-                'registered_guests': event.registered_guests,
-                'total_attendance': event.attended_students + event.attended_guests,
-                'total_registered': event.registered_students + event.registered_guests,
+                'enrolled': enrolled_serializer.data,
+                'attended': attended_serializer.data,
             }
+
             return Response(data, status=status.HTTP_200_OK)
+
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['GET'], url_path='attendance_stats')
+    def get_attendance_stats(self, request):#this method for guests only
+        """
+        Retrieve attendance statistics for all events.
+        """
+        try:
+            events = Event.objects.all().order_by('-schedule__created_at')  
+            paginator = EventAttendancePagination()
+            page = paginator.paginate_queryset(events, request) 
+            data = []
+            for event in events:
+                event_data = {
+                    'id': event.id,
+                    'title': event.title,  
+                    'date': event.schedule.created_at if hasattr(event, 'schedule') and event.schedule else None,  
+                    'attended': event.attended_guests,
+                    'enrolled': event.registered_guests,
+                }
+                data.append(event_data)
+            return Response(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EventAttendanceViewSet(viewsets.ViewSet):

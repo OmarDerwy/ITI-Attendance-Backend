@@ -325,9 +325,13 @@ class StudentWithWarningSerializer(serializers.ModelSerializer):
         return None
 
 class GuestSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(source='user.first_name', read_only=True) 
+    last_name= serializers.CharField(source='user.last_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    phone_number = serializers.CharField(source='user.phone_number', read_only=True)
     class Meta:
         model = Guest
-        fields = ['id', 'user', 'date_of_birth', 'national_id', 'college_name', 'university_name','gradyear', 'degree_level']
+        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'date_of_birth', 'national_id', 'college_name', 'university_name','gradyear', 'degree_level']
 
 class EventSessionSerializer(serializers.ModelSerializer):
     speaker = serializers.CharField(source='instructor') 
@@ -354,7 +358,7 @@ class EventSerializer(serializers.ModelSerializer):
         required=False,
         source='target_tracks'
     )
-    sessions = EventSessionSerializer(many=True, required=False)  
+    sessions = serializers.SerializerMethodField()  
     title = serializers.CharField(source='schedule.name', read_only=True)
     branch = serializers.PrimaryKeyRelatedField(source='schedule.custom_branch', read_only=True)
     branch_name = serializers.CharField(source='schedule.custom_branch.name', read_only=True)
@@ -427,7 +431,7 @@ class EventSerializer(serializers.ModelSerializer):
 
 class EventAttendanceRecordSerializer(serializers.ModelSerializer):
     student_details = serializers.SerializerMethodField(read_only=True)
-    guest_details = serializers.SerializerMethodField(read_only=True)
+    guest_details = serializers.SerializerMethodField()
     schedule_details = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -439,7 +443,7 @@ class EventAttendanceRecordSerializer(serializers.ModelSerializer):
             'student',
             'student_details',
             'guest',
-            'guest_details',
+            'guest_details',  # Include guest_details
             'check_in_time',
             'check_out_time',
             'status',
@@ -458,10 +462,7 @@ class EventAttendanceRecordSerializer(serializers.ModelSerializer):
 
     def get_guest_details(self, obj):
         if obj.guest:
-            return {
-                "first_name": obj.guest.user.first_name,
-                "last_name": obj.guest.user.last_name
-            }
+            return GuestSerializer(obj.guest).data
         return None
 
     def get_schedule_details(self, obj):
