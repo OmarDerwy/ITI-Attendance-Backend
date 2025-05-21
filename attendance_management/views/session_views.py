@@ -151,6 +151,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 session_type = "online" if session_data.get('isOnline') else "offline"
                 start_time = parse_datetime(session_data.get('start'))
                 end_time = parse_datetime(session_data.get('end'))
+                room = session_data.get('room')
                 custom_branch_id = session_data.get('branch', {}).get('id')
                 schedule_date = parse_datetime(session_data.get('schedule_date')).date() if session_data.get('schedule_date') else start_time.date()
 
@@ -180,6 +181,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                         session.instructor = instructor
                         session.start_time = start_time
                         session.end_time = end_time
+                        session.room = room
                         session.session_type = session_type
                         # Always assign the proper schedule based on the new date
                         # This handles moving sessions between days
@@ -194,6 +196,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                             schedule=schedule,
                             start_time=start_time,
                             end_time=end_time,
+                            room=room,
                             session_type=session_type
                         )
                         created_sessions.append(new_session)  # Add the new session to the created list
@@ -205,6 +208,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                         schedule=schedule,
                         start_time=start_time,
                         end_time=end_time,
+                        room=room,
                         session_type=session_type
                     )
                     created_sessions.append(new_session)  # Add the new session to the created list
@@ -266,7 +270,8 @@ class SessionViewSet(viewsets.ModelViewSet):
             'session_type',  
             'start_time', 
             'end_time',  
-            'schedule_id',  
+            'schedule_id',
+            'room',
             'schedule__custom_branch_id', 
             'schedule__custom_branch__name',
             'schedule__created_at'
@@ -282,6 +287,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 "is_online": session['session_type'] == "online",
                 "start": session['start_time'],
                 "end": session['end_time'],
+                "room": session['room'],
                 "branch": {
                     "id": session['schedule__custom_branch_id'],
                     "name": session['schedule__custom_branch__name']

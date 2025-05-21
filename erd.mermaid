@@ -17,6 +17,12 @@ erDiagram
         float longitude
         string location_url
         float radius
+        int branch_manager_id FK
+    }
+    Coordinator {
+        int id PK
+        int user_id FK
+        int branch_id FK
     }
     Track {
         int id PK
@@ -24,9 +30,18 @@ erDiagram
         int supervisor_id FK
         int intake
         date start_date
+        boolean is_active
         string description
         int default_branch_id FK
         string program_type
+    }
+    Event {
+        int id PK
+        string description
+        string audience_type
+        boolean is_mandatory
+        datetime created_at
+        datetime updated_at
     }
     Schedule {
         int id PK
@@ -35,16 +50,17 @@ erDiagram
         date created_at
         int custom_branch_id FK
         boolean is_shared
+        int event_id FK
     }
     Session {
         int id PK
-        int track_id FK
         int schedule_id FK
         string title
         string instructor
         datetime start_time
         datetime end_time
         string session_type
+        string room
     }
     Student {
         int id PK
@@ -70,6 +86,27 @@ erDiagram
         string status
         int schedule_id FK
         datetime adjusted_time
+        datetime created_at
+        datetime updated_at
+    }
+    Guest {
+        int id PK
+        int user_id FK
+        date date_of_birth
+        string national_id
+        string college_name
+        string university_name
+        date gradyear
+        string degree_level
+    }
+    EventAttendanceRecord {
+        int id PK
+        int schedule_id FK
+        int student_id FK
+        int guest_id FK
+        datetime check_in_time
+        datetime check_out_time
+        string status
         datetime created_at
         datetime updated_at
     }
@@ -117,27 +154,25 @@ erDiagram
     User ||--o{ FoundItem : "finds"
     User ||--o{ Notification : "receives"
     User ||--|| Student : "is"
-    Track ||--o{ Schedule : "has"
+    User ||--|| Guest : "is"
+    User ||--|| Coordinator : "is"
+    Branch ||--|| User : "branch_manager"
+    Branch ||--o{ Coordinator : "has"
     Track ||--o{ Student : "enrolls"
     Track ||--o{ Session : "has"
     Track ||--|| Branch : "default"
-    Schedule ||--o{ Session : "has"
+    Track }o--o{ Event : "target"
+    Schedule ||--|{ Session : "has"
     Schedule ||--o{ AttendanceRecord : "for"
     Schedule ||--o{ PermissionRequest : "for"
-    Schedule ||--|| Track : "belongs to"
-    Schedule ||--|| Branch : "custom"
-    Session ||--|| Schedule : "belongs to"
+    Schedule }o--o| Track : "belongs to"
+    Schedule }o--o| Branch : "custom"
     Student ||--o{ AttendanceRecord : "has"
     Student ||--o{ PermissionRequest : "requests"
-    Student ||--|| Track : "enrolled in"
-    Student ||--|| User : "profile"
-    AttendanceRecord ||--|| Student : "for"
-    AttendanceRecord ||--|| Schedule : "for"
-    PermissionRequest ||--|| Student : "by"
-    PermissionRequest ||--|| Schedule : "for"
+    Event |o--|| Schedule : "has"
+    EventAttendanceRecord ||--o{ Schedule : "for"
+    EventAttendanceRecord ||--o{ Student : "for"
+    EventAttendanceRecord ||--o{ Guest : "for"
     LostItem ||--o{ MatchedItem : "matched"
     FoundItem ||--o{ MatchedItem : "matched"
-    MatchedItem ||--|| LostItem : "lost"
-    MatchedItem ||--|| FoundItem : "found"
-    Notification ||--|| User : "for"
-    Notification ||--|| MatchedItem : "about"
+    Notification }o--|| MatchedItem : "about"

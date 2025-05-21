@@ -27,6 +27,9 @@ sentence-transformers = "~=4.0.1"
 python-dateutil = "*"
 wheel = "*"
 uvicorn = {extras = ["standard"], version = "*"}
+openai = "*"
+huggingface-hub = "*"
+requests = "*"
 
 [dev-packages]
 django-shortcuts = "*"
