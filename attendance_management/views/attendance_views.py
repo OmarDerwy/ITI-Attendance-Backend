@@ -1039,6 +1039,55 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "error": f"An error occurred: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=False, methods=['GET'], url_path='todays-schedule')
+    def get_todays_schedule(self, request):
+        '''
+        STUDENT ONLY
+        Get today's schedule for the logged-in student. if no schedule exists today then return none
+        '''
+        try:
+            # Get the logged-in user's student profile
+            student = Student.objects.get(user=request.user)
+
+            # check if student is active
+            if not student.user.is_active:
+                logger.warning(f"Student {student.user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            today = timezone.localdate()
+            schedule = AttendanceRecord.objects.filter(
+                student=student,
+                schedule__created_at=today,
+            ).prefetch_related('schedule__sessions').first()
+
+            if not schedule:
+                return Response({
+                    "status": "info",
+                    "message": "No schedule found for today.",
+                    "data": None
+                }, status=status.HTTP_200_OK)
+
+            serializer = AttendanceRecordSerializerForStudents(schedule)
+            return Response({
+                "status": "success",
+                "data": serializer.data
+            })
+        except Student.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "No student record found for the logged-in user."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching today's schedule: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"An error occurred: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['GET'], url_path='upcoming-records')
     def get_upcoming_records(self, request):
         """

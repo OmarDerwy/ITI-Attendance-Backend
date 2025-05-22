@@ -1,0 +1,11 @@
+meta {
+  name: attendance states
+  type: http
+  seq: 3
+}
+
+get {
+  url: http://localhost:8000/api/v1/attendance/events/attendance_stats/
+  body: none
+  auth: inherit
+}
