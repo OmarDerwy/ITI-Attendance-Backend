@@ -369,6 +369,7 @@ class EventSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source='schedule.name', read_only=True)
     branch = serializers.PrimaryKeyRelatedField(source='schedule.custom_branch', read_only=True)
     branch_name = serializers.CharField(source='schedule.custom_branch.name', read_only=True)
+    event_date = serializers.DateField(source='schedule.created_at', read_only=True)
     # registered_students = serializers.IntegerField()  
     # registered_guests = serializers.IntegerField()
     # attended_students = serializers.SerializerMethodField()
@@ -388,6 +389,7 @@ class EventSerializer(serializers.ModelSerializer):
             'target_tracks',
             'target_track_ids',
             'sessions',
+            'event_date',
             # 'registered_students',  
             # 'registered_guests',  
             # 'attended_students',
