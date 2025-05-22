@@ -1,11 +1,11 @@
 meta {
-  name: list groups
+  name: all
   type: http
   seq: 1
 }
 
 get {
-  url: {{backend_url}}accounts/groups/
+  url: {{backend_url}}attendance/branches/
   body: multipartForm
   auth: inherit
 }

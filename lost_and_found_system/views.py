@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import logging
-from .utils import match_lost_and_found_items, send_and_save_notification
+from .utils import match_lost_and_found_items, send_and_save_notification, check_description_relevance
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import models  # Add this import for Q objects
@@ -56,6 +56,12 @@ class LostItemViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         logger.info("perform_create method called.")
+        item_name = serializer.validated_data.get("name", "")
+        description = serializer.validated_data.get("description", "")
+        relevance = check_description_relevance(item_name, description)
+        if relevance != "relevant":
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"description": [f"Description is not relevant to item name '{item_name}'. Please enter a valid description."]})
         # Save the lost item
         lost_item = serializer.save(user=self.request.user)
         logger.info(f"LostItem created: {lost_item}")
@@ -123,6 +129,12 @@ class FoundItemViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         logger.info("perform_create method called.")
+        item_name = serializer.validated_data.get("name", "")
+        description = serializer.validated_data.get("description", "")
+        relevance = check_description_relevance(item_name, description)
+        if relevance != "relevant":
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"description": [f"Description is not relevant to item name '{item_name}'. Please enter a valid description."]})
         # Save the found item
         found_item = serializer.save(user=self.request.user)
         logger.info(f"FoundItem created: {found_item}")

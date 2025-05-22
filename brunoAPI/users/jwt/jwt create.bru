@@ -5,14 +5,14 @@ meta {
 }
 
 post {
-  url: http://127.0.0.1:8000/api/v1/accounts/auth/jwt/create/
+  url: {{backend_url}}accounts/auth/jwt/create/
   body: multipartForm
   auth: inherit
 }
 
 body:multipart-form {
-  email: orland95@gmail.com
-  password: test
+  email: {{email}}
+  password: {{password}}
 }
 
 script:post-response {

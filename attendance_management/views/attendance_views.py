@@ -1093,7 +1093,7 @@ class AttendanceViewSet(viewsets.ViewSet):
                 "message": f"An error occurred: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)            
     @action(detail=False, methods=['GET'], url_path='upcoming-records-gt')
-    def get_upcoming_records(self, request):
+    def get_upcoming_records_gt(self, request):
         """
         Get upcoming attendance records for the logged-in student.
         Returns attendance records where the schedule date is today or in the future.

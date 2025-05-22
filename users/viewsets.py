@@ -31,27 +31,14 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         # Extract required data
         email = request.data.get('email')
-        if not email:
-            raise ValidationError({'error': 'Email is required'})
-        password = 'test'  # In production: get_random_string(length=8)
-        user = models.CustomUser.objects.create_user(
-            email=email,
-            password=password,
-            is_active=False,
-            first_name=request.data.get('first_name'),
-            last_name=request.data.get('last_name'),
-            phone_number=request.data.get('phone_number'),
-        )
-        # Allow groups to be overridden via kwargs
+        first_name=request.data.get('first_name')
+        last_name=request.data.get('last_name')
+        phone_number=request.data.get('phone_number')
         groups = kwargs.get('groups', request.data.get('groups', []))
-        if groups:
-            if isinstance(groups, str):
-                groups = [groups]
-            user_group = Group.objects.get(name=groups[0])
-            user.groups.add(user_group)
-        # Send activation email
-        self._send_confirmation_mail(user)
-        return user
+
+        return NotImplementedError("This method should be implemented in the subclass")
+
+    
 
     def update(self, request, *args, **kwargs):
         user = self.get_object()
@@ -61,6 +48,31 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
         # Allow groups to be overridden via kwargs
         groups = kwargs.get('groups', request.data.get('groups', [])) #TODO of course of groups are changed like this, other models related to previous role need to be removed as well
 
+        return NotImplementedError("This method should be implemented in the subclass")
+
+    def _create_user(self, email, first_name, last_name, phone_number, groups):
+        if not email:
+            raise ValidationError({'error': 'Email is required'})
+        password = 'test'  # In production: get_random_string(length=8)
+        user = models.CustomUser.objects.create_user(
+            email=email,
+            password=password,
+            is_active=False,
+            first_name=first_name,
+            last_name=last_name,
+            phone_number=phone_number,
+        )
+        # Allow groups to be overridden via kwargs
+        if groups:
+            if isinstance(groups, str):
+                groups = [groups]
+            user_group = Group.objects.get(name=groups[0])
+            user.groups.add(user_group)
+        # Send activation email
+        self._send_confirmation_mail(user)
+        return user
+
+    def _update_user(self, user, email, first_name, last_name, phone_number, groups):
         email_changed = False
         if email and email != user.email:
             user.email = email #TODO email is changed before verification, need to store the old email somwhere
@@ -72,6 +84,8 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
             user.first_name = first_name
         if last_name:
             user.last_name = last_name
+        if phone_number:
+            user.phone_number = phone_number
         if groups:
             if isinstance(groups, str):
                 groups = [groups]
@@ -94,17 +108,22 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
             from_email=os.environ.get('EMAIL_USER'),
             recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
         )
-    def _bulk_create_users(self, request, *args, **kwargs):
+    def _bulk_create_users(self, users, groups):
         """
         Bulk create users from a request.
         Returns a list of created user objects.
         """
-        users_data = request.data.get('users', [])
-        if not users_data:
+        if not users:
             raise ValidationError({'error': 'No user data provided'})
         created_users = []
-        for user_data in users_data:
-            user = self.create(request, *args, **kwargs)
+        for user_data in users:
+            user = self._create_user(
+                email=user_data.get('email'),
+                first_name=user_data.get('first_name'),
+                last_name=user_data.get('last_name'),
+                phone_number=user_data.get('phone_number', None),
+                groups=groups
+            )
             created_users.append(user)
         return created_users
         
@@ -132,11 +151,30 @@ class UserViewSet(AbstractUserViewSet):
         data = self.queryset.filter(groups=group, is_active=True)
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
+    @action(detail=False, methods=['get'], url_path='branch-managers', permission_classes=[core_permissions.IsAdminUser])
+    def instructors_list(self, request):
+        group = Group.objects.get(name="branch-manager")
+        is_available = request.query_params.get('available', None)
+        is_available = is_available.lower() == 'true' if is_available else False
+        data = self.queryset.filter(groups=group, is_active=True)
+        if is_available:
+            data = data.filter(branch__isnull=True)
+        serializer = self.get_serializer(data, many=True)
+        return Response(serializer.data)
 
-    @action(detail=False, methods=['get'], url_path='supervisors')
+    @action(detail=False, methods=['get'], url_path='supervisors', permission_classes=[core_permissions.IsCoordinatorOrAboveUser])
     def supervisors_list(self, request):
-        group = Group.objects.get(name="supervisor")
-        data = self.queryset.filter(groups=group)
+        request_user = self.request.user
+        request_user_groups = request_user.groups.values_list('name', flat=True)
+        data = self.queryset.filter(groups__name="supervisor", is_active=True)
+        if 'admin' in request_user_groups:
+            serializer = self.get_serializer(data, many=True)
+            return Response(serializer.data)
+        if 'branch-manager' in request_user_groups:
+            branch_of_request_user = request_user.branch
+        if 'coordinator' in request_user_groups:
+            branch_of_request_user = request_user.coordinator.branch
+        data = data.filter(Q(tracks=None) | Q(tracks__default_branch=branch_of_request_user)).distinct()
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
@@ -155,18 +193,25 @@ class UserViewSet(AbstractUserViewSet):
         return Response(serializer.data)
     
     def create(self, request, *args, **kwargs):
-        user = super().create(request, *args, **kwargs)
+        user = self._create_user(
+            email=request.data.get('email'),
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+            groups=kwargs.get('groups', request.data.get('groups', []))
+        )
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-        # access_token = AccessToken.for_user(user)
-        # create_password_url = f"{FRONTEND_BASE_URL}{ACTIVATION_PATH}{access_token}/"
-        # return Response({
-        #     'user': serializer.data,
-        #     'confirmation_link': create_password_url
-        # }, status=status.HTTP_201_CREATED)
         
     def update(self, request, *args, **kwargs):
-        user = super().update(request, *args, **kwargs)
+        user = self._update_user(
+            user=self.get_object(),
+            email=request.data.get('email'),
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+            groups=kwargs.get('groups', request.data.get('groups', []))
+        )
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
             
@@ -347,8 +392,14 @@ class CoordinatorViewSet(AbstractUserViewSet):
         request_user = self.request.user
         request_user_branch = request_user.branch
         # Ensure the 'coordinator' group is included in kwargs
-        kwargs['groups'] = ['coordinator']
-        user = super().create(request, *args, **kwargs)
+        groups = ['coordinator']
+        user = self._create_user(
+            email=request.data.get('email'),
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+            groups=groups
+        )
         coordinator = attend_models.Coordinator.objects.create(user=user, branch=request_user_branch)
         serializer = self.get_serializer(user)
         return Response({
@@ -356,11 +407,79 @@ class CoordinatorViewSet(AbstractUserViewSet):
             'coordinator_id': coordinator.id
         }, status=status.HTTP_201_CREATED)
     def update(self, request, *args, **kwargs): #TODO add things to change in the coordinator profile
-        user = super().update(request, *args, **kwargs)
+        user = self._update_user(
+            user=self.get_object(),
+            email=request.data.get('email'),
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+        )
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+class GuestViewSet(AbstractUserViewSet):
+    queryset = models.CustomUser.objects.filter(groups__name='guest').order_by('id')
+    serializer_class = serializers.CustomUserSerializer
+    permission_classes = [core_permissions.IsCoordinatorOrAboveUser] 
 
+    def create(self, request, *args, **kwargs):
+        date_of_birth = request.data.get('date_of_birth')
+        national_id = request.data.get('national_id')
+        college_name = request.data.get('college_name')
+        university_name = request.data.get('university_name')
+        gradyear = request.data.get('gradyear')
+        degree = request.data.get('degree')
+        # Ensure the 'guest' group is included in kwargs
+        groups = ['guest']
+        user = self._create_user(
+            email=request.data.get('email'),
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+            groups=groups
+        )
+        # Create guest profile and associate with user
+        guest_profile = attend_models.Guest.objects.create(
+            user=user,
+            date_of_birth=date_of_birth,
+            national_id=national_id,
+            college_name=college_name,
+            university_name=university_name,
+            gradyear=gradyear,
+            degree_level=degree
+        )
+        serializer = self.get_serializer(user)
+        return Response({'user': serializer.data, 'guest_profile': guest_profile.id}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='bulk-create')
+    def bulk_create(self, request, *args, **kwargs):
+        """
+        Bulk create guests. Expects a list of user dicts in 'users'.
+        Each user dict must include 'email', 'first_name', 'last_name', 'phone_number', and 'track_id'.
+        """
+        
+        users = request.data.get('users', [])
+        groups = ['guest']
+        created_users = self._bulk_create_users(users, groups)
+
+        guest_profiles = []
+        for user in created_users:
+            guest_profiles.append(attend_models.Guest(
+                user=user,
+                date_of_birth=request.data.get('date_of_birth'),
+                national_id=request.data.get('national_id'),
+                college_name=request.data.get('college_name'),
+                university_name=request.data.get('university_name'),
+                gradyear=request.data.get('gradyear'),
+                degree_level=request.data.get('degree')
+            ))
+        attend_models.Guest.objects.bulk_create(guest_profiles)
+
+        serializer = self.get_serializer(created_users, many=True)
+        return Response({
+            'message': 'Bulk guest user creation successful!',
+            'users': serializer.data
+            }, status=status.HTTP_201_CREATED)
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by('name')
     serializer_class = serializers.GroupSerializer
@@ -467,18 +586,28 @@ class StudentViewSet(AbstractUserViewSet):
     def create(self, request, *args, **kwargs):
         # Check supervisor permissions
         request_user = self.request.user
-        kwargs['groups'] = ['student']
+        groups = request_user.groups.values_list('name', flat=True)
 
         # Get the track object from the body
         track_id = request.data.get('track_id')
         if not track_id:
             return Response({'error': 'Track ID is required'}, status=400)
-        track_obj = request_user.tracks.get(id=track_id)
-        if not track_obj:
-            return Response({'error': 'You are not currently the supervisor of any track'}, status=400)
+        try:
+            if 'supervisor' in groups:
+                track_obj = request_user.tracks.get(id=track_id)
+            elif 'coordinator' in groups:
+                track_obj = attend_models.Track.objects.get(id=track_id, default_branch__coordinators=request_user.coordinator)
+        except attend_models.Track.DoesNotExist:
+            return Response({'error': "The requested track does not exist or you don't have authority over it."}, status=400)
 
         # Use AbstractUserViewSet's create to create the user and send email
-        user = super().create(request, *args, **kwargs)
+        user = self._create_user(
+            email=request.data.get('email'),
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+            groups=['student']
+        )
 
         # Create student profile and associate with track
         student_profile = attend_models.Student.objects.create(track=track_obj, user=user)
@@ -492,7 +621,13 @@ class StudentViewSet(AbstractUserViewSet):
 
     def update(self, request, *args, **kwargs): #TODO add things to change in the student profile
         # Use AbstractUserViewSet's update to update the user and send email if needed
-        user = super().update(request, *args, **kwargs)
+        user = self._update_user(
+            user=self.get_object(),
+            email=request.data.get('email'),
+            first_name=request.data.get('first_name'),
+            last_name=request.data.get('last_name'),
+            phone_number=request.data.get('phone_number'),
+        )
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -519,6 +654,14 @@ class StudentViewSet(AbstractUserViewSet):
             'confirmation_link': create_password_url
         })
     
+    @action(detail=True, methods=['patch'], url_path='reset-uuid')
+    def reset_uuid(self, request, *args, **kwargs):
+        student = self.get_object()
+        student.student_profile.phone_uuid = None
+        student.student_profile.laptop_uuid = None
+        student.student_profile.save()
+        return Response({'message': 'UUID has been reset successfully.'})
+    
     @action(detail=False, methods=['post'], url_path='bulk-create', permission_classes=[core_permissions.IsSupervisorOrAboveUser])
     def bulk_create(self, request, *args, **kwargs):
         """
@@ -526,27 +669,33 @@ class StudentViewSet(AbstractUserViewSet):
         Each user dict must include 'email', 'first_name', 'last_name', 'phone_number', and 'track_id'.
         """
         
-        kwargs['groups'] = ['student']
-        created_users = self._bulk_create_users(request, *args, **kwargs)
+        users = request.data.get('users', [])
+        groups = ['student']
+        created_users = self._bulk_create_users(users, groups)
 
-        requestUser = self.request.user
+        request_user = self.request.user
+        request_user_groups = request_user.groups.values_list('name', flat=True)
         track_id = request.data.get('track_id')
         if not track_id:
             return Response({'error': 'Track ID is required for all users'}, status=400)
-        track_obj = requestUser.tracks.get(id=track_id) if track_id else None
-        if not track_obj:
-            return Response({'error': f'You currently arent the supervisor of any track.'}, status=400)
+        try:
+            if 'supervisor' in request_user_groups:
+                track_obj = request_user.tracks.get(id=track_id)
+            elif 'coordinator' in request_user_groups:
+                track_obj = attend_models.Track.objects.get(id=track_id, default_branch__coordinators=request_user.coordinator)
+        except:
+            return Response({'error': f"The requested track does not exist or you don't have authority over it."}, status=400)
         student_profiles = []
         for user in created_users:
-            student_profiles += attend_models.Student(
+            student_profiles.append(attend_models.Student(
                 track=track_obj,
                 user=user
-            )
+            ))
         attend_models.Student.objects.bulk_create(student_profiles)
 
         serializer = self.get_serializer(created_users, many=True)
         return Response({
-            'message': 'Bulk user creation successful!',
+            'message': 'Bulk student user creation successful!',
             'users': serializer.data
             }, status=status.HTTP_201_CREATED)
 

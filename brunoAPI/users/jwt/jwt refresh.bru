@@ -5,11 +5,15 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/api/v1/accounts/auth/jwt/refresh
+  url: {{backend_url}}accounts/auth/jwt/refresh
   body: multipartForm
   auth: none
 }
 
 body:multipart-form {
   refresh: {{jwt-refresh}}
+}
+
+script:post-response {
+  bru.getEnvVar("jwt-access", res.body.access)
 }

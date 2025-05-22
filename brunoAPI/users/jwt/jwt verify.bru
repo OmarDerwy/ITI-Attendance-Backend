@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/api/v1/accounts/auth/jwt/verify
+  url: {{backend_url}}accounts/auth/jwt/verify
   body: multipartForm
   auth: inherit
 }

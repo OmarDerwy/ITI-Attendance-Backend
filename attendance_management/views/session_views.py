@@ -44,18 +44,26 @@ class SessionViewSet(viewsets.ModelViewSet):
     @transaction.atomic  # Ensure all operations in this method are atomic which means they will either all succeed or none will be applied
     def bulk_create_or_update(self, request):
         """
-        Handle bulk creation or updating of sessions.
+        Handle bulk creation, updating, or deletion of sessions.
         """
         import logging
         logger = logging.getLogger(__name__) 
 
-        combined_events = request.data.get('combinedEvents')  
+        combined_events = request.data.get('combinedEvents', [])  
+        deleted_events = request.data.get('deletedEvents', [])
+        
         if not isinstance(combined_events, list):  # Validate that combinedEvents is a list
             logger.error("Invalid data format: combinedEvents is not a list.")
             return Response({'error': 'Invalid data format. Expected a list under "combinedEvents".'}, status=400)
+            
+        if not isinstance(deleted_events, list):  # Validate that deletedEvents is a list
+            logger.error("Invalid data format: deletedEvents is not a list.")
+            return Response({'error': 'Invalid data format. Expected a list under "deletedEvents".'}, status=400)
 
         created_sessions = []  # List to store newly created sessions
         updated_sessions = []  # List to store updated sessions
+        deleted_sessions = []  # List to store deleted sessions
+        deleted_schedules = []  # List to store deleted schedules
 
         def get_or_create_schedule(track_id, schedule_date, custom_branch_id):
             """
@@ -104,6 +112,31 @@ class SessionViewSet(viewsets.ModelViewSet):
                 logger.error(f"Error getting or creating schedule: {str(e)}")  # Fixed logging statement
                 raise e
 
+        # Process deletions first
+        for session_id in deleted_events:
+            try:
+                session = Session.objects.get(id=session_id)
+                schedule = session.schedule
+                
+                # Delete the session
+                session.delete()
+                deleted_sessions.append(session_id)
+                
+                # Check if the schedule is now empty (no more sessions)
+                if not schedule.sessions.exists():
+                    # Delete attendance records associated with the schedule
+                    # (will be deleted automatically due to CASCADE)
+                    schedule_id = schedule.id
+                    schedule.delete()
+                    deleted_schedules.append(schedule_id)
+                    
+            except Session.DoesNotExist:
+                logger.warning(f"Attempted to delete non-existent session with ID: {session_id}")
+            except Exception as e:
+                logger.error(f"Error deleting session with ID {session_id}: {str(e)}")
+                return Response({'error': f"Error deleting session with ID {session_id}: {str(e)}"}, status=400)
+
+        # Process creation and updates
         for session_data in combined_events:  
             if not isinstance(session_data, dict):  # Validate that session_data is a dictionary
                 logger.error(f"Invalid session data format: {session_data}")  # Fixed logging statement
@@ -118,6 +151,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 session_type = "online" if session_data.get('isOnline') else "offline"
                 start_time = parse_datetime(session_data.get('start'))
                 end_time = parse_datetime(session_data.get('end'))
+                room = session_data.get('room')
                 custom_branch_id = session_data.get('branch', {}).get('id')
                 schedule_date = parse_datetime(session_data.get('schedule_date')).date() if session_data.get('schedule_date') else start_time.date()
 
@@ -147,6 +181,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                         session.instructor = instructor
                         session.start_time = start_time
                         session.end_time = end_time
+                        session.room = room
                         session.session_type = session_type
                         # Always assign the proper schedule based on the new date
                         # This handles moving sessions between days
@@ -161,6 +196,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                             schedule=schedule,
                             start_time=start_time,
                             end_time=end_time,
+                            room=room,
                             session_type=session_type
                         )
                         created_sessions.append(new_session)  # Add the new session to the created list
@@ -172,6 +208,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                         schedule=schedule,
                         start_time=start_time,
                         end_time=end_time,
+                        room=room,
                         session_type=session_type
                     )
                     created_sessions.append(new_session)  # Add the new session to the created list
@@ -179,7 +216,6 @@ class SessionViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 logger.error(f"Error processing session data: {session_data}, Error: {str(e)}")
                 return Response({'error': f"Error processing session data: {session_data}, Error: {str(e)}"}, status=400)
-
         # Cleanup: Delete attendance records for schedules with no associated sessions
         empty_schedules = Schedule.objects.filter(
             sessions__isnull=True
@@ -188,12 +224,13 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         # Attendance records will now be deleted automatically due to cascading
         empty_schedules.delete()
-
         # Return a response with the created and updated session IDs
         return Response(status=200, data={
             'message': 'Bulk operation completed successfully.',
             'created_sessions': [session.id for session in created_sessions],
             'updated_sessions': [session.id for session in updated_sessions],
+            'deleted_sessions': deleted_sessions,
+            'deleted_schedules': deleted_schedules,
             'deleted_empty_schedules_count': empty_schedules_count
         })
 
@@ -203,7 +240,12 @@ class SessionViewSet(viewsets.ModelViewSet):
         """
         Retrieve calendar data by joining schedules with sessions.
         """
-        track_id = request.query_params.get('track_id')
+        request_user = self.request.user
+        if not hasattr(request_user, 'student_profile'):
+            track_id = request.query_params.get('track_id')
+        else:
+            student = request_user.student_profile
+            track_id = student.track.id
 
         # Ensure track filter is mandatory
         if not track_id:
@@ -228,7 +270,8 @@ class SessionViewSet(viewsets.ModelViewSet):
             'session_type',  
             'start_time', 
             'end_time',  
-            'schedule_id',  
+            'schedule_id',
+            'room',
             'schedule__custom_branch_id', 
             'schedule__custom_branch__name',
             'schedule__created_at'
@@ -244,6 +287,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 "is_online": session['session_type'] == "online",
                 "start": session['start_time'],
                 "end": session['end_time'],
+                "room": session['room'],
                 "branch": {
                     "id": session['schedule__custom_branch_id'],
                     "name": session['schedule__custom_branch__name']
@@ -256,23 +300,23 @@ class SessionViewSet(viewsets.ModelViewSet):
 
         return Response(result, status=200)
 
-    def destroy(self, request, *args, **kwargs):
-        """
-        Override destroy to ensure the session is deleted, and if the schedule becomes empty,
-        delete the schedule and its associated attendance records.
-        """
-        instance = self.get_object()
-        schedule = instance.schedule
+    # def destroy(self, request, *args, **kwargs):
+    #     """
+    #     Override destroy to ensure the session is deleted, and if the schedule becomes empty,
+    #     delete the schedule and its associated attendance records.
+    #     """
+    #     instance = self.get_object()
+    #     schedule = instance.schedule
 
-        # Delete the session
-        instance.delete()
+    #     # Delete the session
+    #     instance.delete()
 
-        # Check if the schedule is now empty
-        if not schedule.sessions.exists():
-            # Delete attendance records associated with the schedule
-            schedule.attendance_records.all().delete()
+    #     # Check if the schedule is now empty
+    #     if not schedule.sessions.exists():
+    #         # Delete attendance records associated with the schedule
+    #         schedule.attendance_records.all().delete()
 
-            # Delete the schedule itself
-            schedule.delete()
+    #         # Delete the schedule itself
+    #         schedule.delete()
 
-        return Response({'message': 'Session deleted successfully. Schedule and attendance records deleted if empty.'}, status=204)
+    #     return Response({'message': 'Session deleted successfully. Schedule and attendance records deleted if empty.'}, status=204)
