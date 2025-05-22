@@ -6,30 +6,40 @@ from lost_and_found_system.utils import send_and_save_notification
 
 logger = logging.getLogger(__name__)
 
+
 @receiver(post_save, sender=Session)
 def notify_students_on_session_create_or_update(sender, instance, created, **kwargs):
     """
     Signal handler to notify students when a session is created or updated
     """
+    action = None  # Initialize to avoid unbound variable error
     try:
         # Get the schedule and track for this session
         schedule = instance.schedule
         track = schedule.track
         students = Student.objects.filter(track=track)
-        
+
         if created:
             # Session was created
             title = "New Session Created"
-            message = f"New session '{instance.title}' has been added to schedule '{schedule.name}' for {track.name} on {schedule.created_at.strftime('%d %b, %Y')}"
+            message = (
+                f"New session '{instance.title}' has been added to schedule "
+                f"'{schedule.name}' for {track.name} on {schedule.created_at.strftime('%d %b, %Y')}"
+            )
             action = "creation"
         else:
             # Session was updated
             title = "Session Updated"
-            message = f"Session '{instance.title}' for {track.name} on {schedule.created_at.strftime('%d %b, %Y')} has been updated"
+            message = (
+                f"Session '{instance.title}' for {track.name} on "
+                f"{schedule.created_at.strftime('%d %b, %Y')} has been updated"
+            )
             action = "update"
-        
-        logger.info(f"Preparing to send session {action} notifications to {students.count()} students in {track.name}")
-        
+
+        logger.info(
+            f"Preparing to send session {action} notifications to {students.count()} students in {track.name}"
+        )
+
         # Send notification to each student in the track
         notification_count = 0
         for student in students:
@@ -41,15 +51,25 @@ def notify_students_on_session_create_or_update(sender, instance, created, **kwa
                         message=message
                     )
                     notification_count += 1
-                    logger.info(f"Successfully sent session {action} notification {notification.id} to {student.user.email}")
+                    logger.info(
+                        f"Successfully sent session {action} notification {notification.id} to {student.user.email}"
+                    )
                 except Exception as e:
-                    logger.error(f"Error sending session {action} notification to {student.user.email}: {str(e)}", exc_info=True)
-        
-        logger.info(f"Successfully sent {notification_count} session {action} notifications out of {students.count()} students")
-    
+                    logger.error(
+                        f"Error sending session {action} notification to {student.user.email}: {str(e)}",
+                        exc_info=True
+                    )
+
+        logger.info(
+            f"Successfully sent {notification_count} session {action} notifications out of {students.count()} students"
+        )
+
     except Exception as e:
-        # Catch any other exceptions to prevent signal failures
-        logger.error(f"Unexpected error in session {action} notification handler: {str(e)}", exc_info=True)
+        logger.error(
+            f"Unexpected error in session {'notification' if action is None else action + ' notification'} handler: {str(e)}",
+            exc_info=True
+        )
+
 
 @receiver(post_delete, sender=Session)
 def notify_students_on_session_deletion(sender, instance, **kwargs):
@@ -61,12 +81,17 @@ def notify_students_on_session_deletion(sender, instance, **kwargs):
         schedule = instance.schedule
         track = schedule.track
         students = Student.objects.filter(track=track)
-        
+
         title = "Session Deleted"
-        message = f"Session '{instance.title}' has been removed from schedule '{schedule.name}' for {track.name} on {schedule.created_at.strftime('%d %b, %Y')}"
-        
-        logger.info(f"Sending session deletion notifications to {students.count()} students in {track.name}")
-        
+        message = (
+            f"Session '{instance.title}' has been removed from schedule "
+            f"'{schedule.name}' for {track.name} on {schedule.created_at.strftime('%d %b, %Y')}"
+        )
+
+        logger.info(
+            f"Sending session deletion notifications to {students.count()} students in {track.name}"
+        )
+
         # Send notification to each student in the track
         notification_count = 0
         for student in students:
@@ -78,11 +103,20 @@ def notify_students_on_session_deletion(sender, instance, **kwargs):
                         message=message
                     )
                     notification_count += 1
-                    logger.info(f"Successfully sent session deletion notification to {student.user.email}")
+                    logger.info(
+                        f"Successfully sent session deletion notification to {student.user.email}"
+                    )
                 except Exception as e:
-                    logger.error(f"Error sending session deletion notification to {student.user.email}: {str(e)}", exc_info=True)
-        
-        logger.info(f"Successfully sent {notification_count} session deletion notifications out of {students.count()} students")
+                    logger.error(
+                        f"Error sending session deletion notification to {student.user.email}: {str(e)}",
+                        exc_info=True
+                    )
+
+        logger.info(
+            f"Successfully sent {notification_count} session deletion notifications out of {students.count()} students"
+        )
     except Exception as e:
-        # Catch any other exceptions to prevent signal failures
-        logger.error(f"Unexpected error in session deletion notification handler: {str(e)}", exc_info=True)
+        logger.error(
+            f"Unexpected error in session deletion notification handler: {str(e)}",
+            exc_info=True
+        )

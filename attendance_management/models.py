@@ -84,7 +84,20 @@ class Event(models.Model):
         blank=True,
         help_text="Specific tracks that can attend this event. Leave empty for all tracks."
     )
-    
+    registered_students = models.PositiveIntegerField(default=0)
+    attended_students = models.PositiveIntegerField(default=0)
+    registered_guests = models.PositiveIntegerField(default=0)
+    attended_guests = models.PositiveIntegerField(default=0)
+
+
+    @property
+    def title(self):
+        return self.schedule.name if hasattr(self, 'schedule') else None
+
+    @property
+    def branch(self):
+        return self.schedule.custom_branch if hasattr(self, 'schedule') else None
+
 class Schedule(models.Model):
     # ForeignKey from Session - related_name: sessions
     # ForeignKey from AttendanceRecord - related_name: attendance_records
@@ -103,7 +116,7 @@ class Schedule(models.Model):
     is_shared = models.BooleanField(default=False)
     event = models.OneToOneField(
         Event,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,  # Changed from SET_NULL to CASCADE
         related_name='schedule',
         null=True,
         blank=True
@@ -388,9 +401,7 @@ class EventAttendanceRecord(models.Model):
             raise ValidationError("Cannot have both student and guest for the same attendance record.")
         
         if not self.student and not self.guest:
-            raise ValidationError("Must provide either student or guest.")
-
-        # Validate based on event audience type
+            raise ValidationError("Must provide either student or guest.")        # Validate based on event audience type
         event_type = self.schedule.event.audience_type
         if self.student:
             if event_type == 'guests_only':
@@ -400,8 +411,8 @@ class EventAttendanceRecord(models.Model):
             if not self.student.track.is_active:
                 raise ValidationError("Student's track is not active.")
             # Check if student's track is allowed for this event
-            if self.schedule.target_tracks.exists():
-                if self.student.track not in self.schedule.target_tracks.all():
+            if self.schedule.event.target_tracks.exists():
+                if self.student.track not in self.schedule.event.target_tracks.all():
                     raise ValidationError("Student's track is not allowed for this event.")
 
         if self.guest:
