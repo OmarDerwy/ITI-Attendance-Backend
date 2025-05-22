@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_datetime  # Import parse_datetime
 from ..models import Event, EventAttendanceRecord, Student, Guest, Schedule, Track, Session, Branch  # Import Branch
 from ..serializers import EventSerializer, EventAttendanceRecordSerializer, EventSessionSerializer
 from core.permissions import IsCoordinatorOrAboveUser, IsStudentOrAboveUser, IsGuestOrAboveUser
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Min
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +150,10 @@ class EventViewSet(viewsets.ModelViewSet):
 
         # For guests, show only guest-allowed events
         elif hasattr(user, 'guest_profile'):
-            queryset = queryset.filter(audience_type__in=['guests_only', 'both'])
+            queryset = queryset.filter(
+                audience_type__in=['guests_only', 'both'],
+                schedule__event_attendance_records__guest__user=user
+            ).distinct()
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
@@ -241,7 +244,41 @@ class EventViewSet(viewsets.ModelViewSet):
                 status='registered'
             ) for student in students
         )
-        
+    
+    @action(detail=False, methods=['GET'], url_path='events-for-registration')
+    def get_events_for_registration(self, request, pk=None):
+        '''
+        GUEST ONLY
+        get events that the logged guest has no eventRecordAttendance for.
+        '''
+        try:
+            user = request.user
+            if not hasattr(user, 'guest_profile'):
+                return Response(
+                    {"error": "Only guests can access this endpoint"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Get today's date
+            now = timezone.localtime()
+
+            # Annotate each event with the earliest session start time
+            events = Event.objects.filter(
+                Q(audience_type='guests_only') | Q(audience_type='both'),
+            ).annotate(
+                earliest_session_start=Min('schedule__sessions__start_time')
+            ).filter(
+                earliest_session_start__gte=now
+            ).exclude(
+                schedule__event_attendance_records__guest__user=user
+            ).distinct()
+
+            serializer = self.get_serializer(events, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=True, methods=['POST'], url_path='register', permission_classes=[IsStudentOrAboveUser])
     def register(self, request, pk=None):
         """
