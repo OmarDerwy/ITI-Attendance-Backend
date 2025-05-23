@@ -187,7 +187,7 @@ class UserViewSet(AbstractUserViewSet):
     
     @action(detail=False, methods=['get'], url_path='admins-and-supervisors')
     def admins_supervisors_list(self, request):
-        group = Group.objects.filter(name__in=["admin", "supervisor"])
+        group = Group.objects.filter(name__in=["admin", "supervisor", "branch-manager"])
         data = self.queryset.filter(groups__in=group).distinct()
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
@@ -214,7 +214,9 @@ class UserViewSet(AbstractUserViewSet):
         )
         serializer = self.get_serializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
-            
+    
+
+
     # get and change groups of user
     @action(detail=True, methods=['get', 'patch', 'put', 'delete'], url_path='groups')
     def user_groups(self, request, *args, **kwargs):
