@@ -1072,10 +1072,10 @@ class AttendanceViewSet(viewsets.ViewSet):
                 }, status=status.HTTP_200_OK)
 
             serializer = AttendanceRecordSerializerForStudents(schedule)
-            return Response({
-                "status": "success",
-                "data": serializer.data
-            })
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
         except Student.DoesNotExist:
             return Response({
                 "status": "error",

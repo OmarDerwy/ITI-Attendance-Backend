@@ -422,6 +422,11 @@ class GuestViewSet(AbstractUserViewSet):
     serializer_class = serializers.CustomUserSerializer
     permission_classes = [core_permissions.IsCoordinatorOrAboveUser] 
 
+    def get_permissions(self):
+        if self.action in ['create']:
+            self.permission_classes = [] # Allow any one to create guest user
+        return super().get_permissions()
+
     def create(self, request, *args, **kwargs):
         date_of_birth = request.data.get('date_of_birth')
         national_id = request.data.get('national_id')

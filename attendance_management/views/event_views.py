@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django.utils.dateparse import parse_datetime  # Import parse_datetime
 from ..models import Event, EventAttendanceRecord, Student, Guest, Schedule, Track, Session, Branch  # Import Branch
-from ..serializers import EventSerializer, EventAttendanceRecordSerializer, EventSessionSerializer
+from ..serializers import EventSerializer, EventAttendanceRecordSerializer, EventAttendanceRecordSerializerForStudents
 from core.permissions import IsCoordinatorOrAboveUser, IsStudentOrAboveUser, IsGuestOrAboveUser
 from django.db.models import Q, Count, Min
 
@@ -271,7 +271,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 earliest_session_start__gte=now
             ).exclude(
                 schedule__event_attendance_records__guest__user=user
-            ).distinct()
+            ).distinct().order_by('earliest_session_start')
 
             serializer = self.get_serializer(events, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -425,13 +425,102 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    @action(detail=False, methods=['GET'], url_path='todays-schedule')
+    def get_todays_schedule(self, request):
+        """
+        STUDENTS AND GUESTS
+        Retrieve today's schedule for the logged-in user using the event attendance record
+        """
+        try:
+            user = request.user
+            today = timezone.localdate()
 
+            if not user.is_active:
+                logger.warning(f"Student {user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
 
-class EventAttendanceViewSet(viewsets.ViewSet):
-    """
-    API endpoints for event attendance management.
-    """
-    permission_classes = [IsAuthenticated]
+            # Get today's schedules based on user type
+            if hasattr(user, 'student_profile'):
+                event_attendance_record = EventAttendanceRecord.objects.filter(
+                    schedule__created_at=today,
+                    student__user=user,
+                ).distinct().first()
+            elif hasattr(user, 'guest_profile'):
+                event_attendance_record = EventAttendanceRecord.objects.filter(
+                    schedule__created_at=today,
+                    guest__user=user,
+                ).distinct().first()
+            else:
+                return Response({"error": "User type not recognized"}, status=status.HTTP_403_FORBIDDEN)
+            if not event_attendance_record:
+                return Response({
+                    "status": "error",
+                    "message": "No attendance record found for today.",
+                    "data": None
+                }, status=status.HTTP_200_OK)
+
+            serializer = EventAttendanceRecordSerializerForStudents(event_attendance_record)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['GET'], url_path='upcoming-records')
+    def get_upcoming_records(self, request):
+        """
+        Get upcoming attendance records for the logged-in student.
+        Returns attendance records where the schedule date is today or in the future.
+        """
+        try:
+            user = self.request.user
+            # check if student is active
+            if not user.is_active:
+                logger.warning(f"Student {user.email} is not active")
+                return Response({
+                    "status": "error",
+                    "message": "Your account is not active. Please contact an administrator.",
+                    "error_code": "account_not_active"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            now = timezone.localtime()
+            # Get today's schedules based on user type
+            if hasattr(user, 'student_profile'):
+                upcoming_records = EventAttendanceRecord.objects.filter(
+                    student__user=user,
+                ).exclude(
+                    schedule__sessions__end_time__lt=now
+                ).distinct().order_by('schedule__created_at')
+            elif hasattr(user, 'guest_profile'):
+                upcoming_records = EventAttendanceRecord.objects.filter(
+                    guest__user=user,
+                ).exclude(
+                    schedule__sessions__end_time__lt=now
+                ).distinct().order_by('schedule__created_at')
+            else:
+                return Response({"error": "User type not recognized"}, status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = EventAttendanceRecordSerializerForStudents(upcoming_records, many=True)
+            
+            return Response({
+                "status": "success",
+                "data": serializer.data
+            })
+        except Student.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "No student record found for the logged-in user."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching upcoming attendance records: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"An error occurred: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['POST'], url_path='check-in')
     def event_check_in(self, request):
