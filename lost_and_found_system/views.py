@@ -59,7 +59,10 @@ class LostItemViewSet(viewsets.ModelViewSet):
         item_name = serializer.validated_data.get("name", "")
         description = serializer.validated_data.get("description", "")
         relevance = check_description_relevance(item_name, description)
-        if relevance != "relevant":
+        
+        if relevance == "api_error":
+            logger.warning(f"Description validation skipped due to API error for item '{item_name}'. Proceeding with matching algorithm.")
+        elif relevance != "relevant":
             from rest_framework.exceptions import ValidationError
             raise ValidationError({"description": [f"Description is not relevant to item name '{item_name}'. Please enter a valid description."]})
         # Save the lost item
@@ -132,7 +135,10 @@ class FoundItemViewSet(viewsets.ModelViewSet):
         item_name = serializer.validated_data.get("name", "")
         description = serializer.validated_data.get("description", "")
         relevance = check_description_relevance(item_name, description)
-        if relevance != "relevant":
+        
+        if relevance == "api_error":
+            logger.warning(f"Description validation skipped due to API error for item '{item_name}'. Proceeding with matching algorithm.")
+        elif relevance != "relevant":
             from rest_framework.exceptions import ValidationError
             raise ValidationError({"description": [f"Description is not relevant to item name '{item_name}'. Please enter a valid description."]})
         # Save the found item

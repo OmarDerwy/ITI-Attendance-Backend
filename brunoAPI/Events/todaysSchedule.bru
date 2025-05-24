@@ -1,0 +1,11 @@
+meta {
+  name: todaysSchedule
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{backend_url}}attendance/todays-schedule
+  body: none
+  auth: inherit
+}

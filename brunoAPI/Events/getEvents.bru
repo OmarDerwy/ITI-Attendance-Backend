@@ -1,0 +1,11 @@
+meta {
+  name: getEvents
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{backend_url}}attendance/events/
+  body: none
+  auth: inherit
+}

@@ -479,3 +479,16 @@ class EventAttendanceRecordSerializer(serializers.ModelSerializer):
             'id': obj.schedule.id,
             'name': obj.schedule.name
         }
+    
+class EventAttendanceRecordSerializerForStudents(AttendanceRecordSerializer):
+    schedule = ScheduleSerializer(read_only=True)  # Read-only field for schedule
+    class Meta:
+        model = EventAttendanceRecord
+        fields = [
+            'id', 
+            'schedule', 
+            'check_in_time', 
+            'check_out_time',
+            'status',
+            'adjusted_time'
+        ]
