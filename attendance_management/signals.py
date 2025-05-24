@@ -126,39 +126,46 @@ def notify_students_on_session_deletion(sender, instance, **kwargs):
             students = Student.objects.filter(track=track, user__is_active=True, track__is_active=True)
             context_info = f"for {track.name}"
             notification_context = f"track {track.name}"
-        elif schedule.event:
-            # Event sub-session - notify based on event's audience_type and target_tracks
-            event = schedule.event
-            students = []
-            
-            if event.audience_type in ['students_only', 'both']:
-                if event.target_tracks.exists():
-                    # Notify students in specific target tracks
-                    students = Student.objects.filter(
-                        track__in=event.target_tracks.all(),
-                        user__is_active=True,
-                        track__is_active=True
-                    )
-                    track_names = ", ".join([track.name for track in event.target_tracks.all()])
-                    context_info = f"for tracks: {track_names}"
-                    notification_context = f"event targeting {track_names}"
-                else:
-                    # Notify all active students if no target tracks specified
-                    students = Student.objects.filter(
-                        user__is_active=True,
-                        track__is_active=True
-                    )
-                    context_info = "for all students"
-                    notification_context = "event for all students"
-            else:
-                # Event is guests_only - no students to notify
-                students = []
-                context_info = "for guests only"
-                notification_context = "guest-only event"
         else:
-            # Schedule has neither track nor event - log warning and skip
-            logger.warning(f"Schedule {schedule.id} has neither track nor event. Skipping session notifications.")
-            return
+            # Check if this schedule has an event (safely handle case where event might be deleted)
+            try:
+                event = schedule.event
+                if event:
+                    # Event sub-session - notify based on event's audience_type and target_tracks
+                    students = []
+                    
+                    if event.audience_type in ['students_only', 'both']:
+                        if event.target_tracks.exists():
+                            # Notify students in specific target tracks
+                            students = Student.objects.filter(
+                                track__in=event.target_tracks.all(),
+                                user__is_active=True,
+                                track__is_active=True
+                            )
+                            track_names = ", ".join([track.name for track in event.target_tracks.all()])
+                            context_info = f"for tracks: {track_names}"
+                            notification_context = f"event targeting {track_names}"
+                        else:
+                            # Notify all active students if no target tracks specified
+                            students = Student.objects.filter(
+                                user__is_active=True,
+                                track__is_active=True
+                            )
+                            context_info = "for all students"
+                            notification_context = "event for all students"
+                    else:
+                        # Event is guests_only - no students to notify
+                        students = []
+                        context_info = "for guests only"
+                        notification_context = "guest-only event"
+                else:
+                    # Schedule has no associated event or track - skip
+                    logger.warning(f"Schedule {schedule.id} has no associated event or track. Skipping session notifications.")
+                    return
+            except Event.DoesNotExist:
+                # Event was deleted (CASCADE) - skip notifications since event is gone
+                logger.info(f"Event associated with schedule {schedule.id} was deleted. Skipping session deletion notifications.")
+                return
 
         title = "Session Deleted"
         message = (
