@@ -117,7 +117,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
 
     def get_queryset(self):
-        base_queryset = Event.objects.all()
+        base_queryset = Event.objects.all().order_by('-schedule__created_at') 
 
         return base_queryset.prefetch_related(
             'schedule__sessions',
