@@ -38,9 +38,7 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
             adjusted_time=adjusted_time,
             reason=reason,
             schedule=schedule,
-        )
-
-        # Send notification to the supervisor of the track
+        )        # Send notification to the supervisor of the track and coordinators of the branch
         supervisor = schedule.track.supervisor
         student_name = f"{student.user.first_name} {student.user.last_name}"
         request_type_display = dict(PermissionRequest.REQUEST_TYPES).get(request_type, request_type)
@@ -51,11 +49,21 @@ class PermissionRequestViewSet(viewsets.ModelViewSet):
             f"Reason: {reason}"
         )
         
+        # Send notification to supervisor
         send_and_save_notification(
             user=supervisor,
             title="New Permission Request",
             message=notification_message
         )
+        
+        # Send notification to coordinators of the branch
+        coordinators = schedule.custom_branch.coordinators.all()
+        for coordinator in coordinators:
+            send_and_save_notification(
+                user=coordinator.user,
+                title="New Permission Request",
+                message=notification_message
+            )
 
         permission_request.save()
         return Response({

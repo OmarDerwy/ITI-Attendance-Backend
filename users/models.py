@@ -10,14 +10,14 @@ from rest_framework.exceptions import ValidationError
 class CustomUserManager(BaseUserManager):
     """Custom user model manager where email is the unique identifier"""
     
-    def create_user(self, email, password, **extra_fields):
+    def create_user(self, email, **extra_fields):
         """Create and save a User with the given email and password."""
         if not email:
             raise ValueError('The Email must be set')
         email = self.normalize_email(email)
         groups = extra_fields.pop('groups', None)
         user = self.model(email=email, **extra_fields)
-        user.set_password(password)
+        user.set_unusable_password()
         user.save()
         if groups:
             group_objs = Group.objects.filter(name__in=groups)
