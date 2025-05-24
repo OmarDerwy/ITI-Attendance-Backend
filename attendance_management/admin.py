@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Branch, Track, Schedule, Session, Student, AttendanceRecord, PermissionRequest, ApplicationSetting
+from .models import Branch, Track, Schedule, Session, Student, AttendanceRecord, PermissionRequest, ApplicationSetting, Event
 
 # Register your models here.
 admin.site.register(Branch)
@@ -25,3 +25,7 @@ class StudentAdmin(admin.ModelAdmin):
 class AttendanceRecordAdmin(admin.ModelAdmin):
     list_display = ('student', 'schedule', 'check_in_time', 'check_out_time')
     search_fields = ('student__user__username', 'schedule__name')
+
+@admin.register(Event)
+class EventAdmin(admin.ModelAdmin):
+    list_display = ('title','description', 'audience_type')

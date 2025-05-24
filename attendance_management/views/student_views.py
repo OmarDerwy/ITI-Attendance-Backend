@@ -133,19 +133,20 @@ class StudentViewSet(viewsets.ModelViewSet):
             # Get students with absences
             students = Student.objects.select_related('user', 'track').filter(
                 track__in=tracks,
-                attendance_records__check_in_time__isnull=True,
+                attendance_records__status='absent', 
                 attendance_records__schedule__in=past_schedules
             ).distinct().annotate(
-                unexcused_count=Count('attendance_records', filter=Q(
-                    attendance_records__check_in_time__isnull=True,
+                total_absences=Count('attendance_records', filter=Q(
+                    attendance_records__status='absent',  
                     attendance_records__schedule__in=past_schedules
-                ) & ~Q(
-                    attendance_records__schedule_id__in=Subquery(approved_excuses)
                 )),
                 excused_count=Count('attendance_records', filter=Q(
-                    attendance_records__check_in_time__isnull=True,
-                    attendance_records__schedule__in=past_schedules,
-                    attendance_records__schedule_id__in=Subquery(approved_excuses)
+                    attendance_records__status='excused', 
+                    attendance_records__schedule__in=past_schedules
+                )),
+                unexcused_count=Count('attendance_records', filter=Q(
+                    attendance_records__status='absent',  
+                    attendance_records__schedule__in=past_schedules
                 ))
             )
 
