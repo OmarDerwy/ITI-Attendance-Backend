@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from django.db.models import Q
+# import get_random_string
+from django.utils.crypto import get_random_string
 # import from attendance_management
 from attendance_management import models as attend_models
 import os
@@ -53,10 +55,8 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
     def _create_user(self, email, first_name, last_name, phone_number, groups):
         if not email:
             raise ValidationError({'error': 'Email is required'})
-        password = 'test'  # In production: get_random_string(length=8)
         user = models.CustomUser.objects.create_user(
             email=email,
-            password=password,
             is_active=False,
             first_name=first_name,
             last_name=last_name,
@@ -106,7 +106,7 @@ class AbstractUserViewSet(viewsets.ModelViewSet):
             subject="Account Activation",
             message=f"Click the link below to activate your account:\n{create_password_url}",
             from_email=os.environ.get('EMAIL_USER'),
-            recipient_list=[os.environ.get('RECIPIENT_EMAIL')],
+            recipient_list=[user.email],
         )
     def _bulk_create_users(self, users, groups):
         """
@@ -728,6 +728,9 @@ class UserActivateView(APIView):
             return Response({'message': 'User is already active.'}, status=400)
 
         user.is_active = True
+
+        password = get_random_string(length=8)
+        user.set_password(password)
         user.save()
         if 'student' in user.groups.all().values_list('name', flat=True):
             student_profile = attend_models.Student.objects.get(user=user)
@@ -740,6 +743,12 @@ class UserActivateView(APIView):
                     numOfAttenCreated += 1
             print(f"Created {numOfAttenCreated} attendance records for {user.email}.")
             return Response({'message': 'User has been activated successfully.', 'attendance_records_created': numOfAttenCreated})
+        send_mail(
+            subject="Account Activation",
+            message=f"Hi, {user.first_name},\nYour account has been activated.\nYour Email is: {user.email}\nYour new password is: {password}",
+            from_email=os.environ.get('EMAIL_USER'),
+            recipient_list=[user.email],
+        )
         return Response({'message': 'User has been activated successfully.'})
     
 class TokenBlacklistViewAll(APIView):
