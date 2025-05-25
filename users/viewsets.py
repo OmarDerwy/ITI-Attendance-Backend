@@ -742,7 +742,6 @@ class UserActivateView(APIView):
                 if created:
                     numOfAttenCreated += 1
             print(f"Created {numOfAttenCreated} attendance records for {user.email}.")
-            return Response({'message': 'User has been activated successfully.', 'attendance_records_created': numOfAttenCreated})
         send_mail(
             subject="Account Activation",
             message=f"Hi, {user.first_name},\nYour account has been activated.\nYour Email is: {user.email}\nYour new password is: {password}",
